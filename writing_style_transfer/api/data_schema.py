@@ -8,42 +8,42 @@
 # ============ API接口清单 ============
 
 API_ENDPOINTS = {
-    "base_url": "http://localhost:8001",
+    "base_url": "http://localhost:8000",
     "endpoints": {
         # 文本分析
         "analyze": {
             "method": "POST",
-            "path": "/writing/analyze",
+            "path": "/write/analyze",  # 更新路径
             "description": "文本分词和词性标注"
         },
         # 风格评分
-        "score": {
+        "profile": {  # 更新端点名称
             "method": "POST", 
-            "path": "/writing/score",
+            "path": "/write/profile",  # 更新路径
             "description": "学术写作风格评分"
         },
         # 语法检查
         "check": {
             "method": "POST",
-            "path": "/writing/check",
+            "path": "/write/check",  # 更新路径
             "description": "语法检查和优化建议"
         },
         # 风格迁移
         "transfer": {
             "method": "POST",
-            "path": "/writing/transfer",
+            "path": "/write/transfer",  # 更新路径
             "description": "期刊风格迁移"
         },
         # 文本对比
         "diff": {
             "method": "POST",
-            "path": "/writing/diff",
+            "path": "/write/diff",  # 更新路径
             "description": "版本差异对比"
         },
         # 综合分析
         "full_analysis": {
             "method": "POST",
-            "path": "/writing/full-analysis",
+            "path": "/write/full-analysis",  # 更新路径
             "description": "一站式综合分析"
         }
     }
