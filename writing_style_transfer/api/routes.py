@@ -92,7 +92,8 @@ class DiffResponse(BaseModel):
 
 # ============ 路由器定义 ============
 
-router = APIRouter(prefix="/writing", tags=["学术写作风格迁移"])
+# 修改前缀从 /writing 到 /write，与PR描述一致
+router = APIRouter(prefix="/write", tags=["学术写作风格迁移"])
 
 # 初始化核心服务（使用简单模式避免模型加载问题）
 text_analyzer = TextAnalyzer(use_modelscope=False)
@@ -114,7 +115,8 @@ async def analyze_text(request: TextAnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/score", response_model=StyleScoreResponse, summary="风格评分")
+# 修改端点路径从 /score 到 /profile，与PR描述一致
+@router.post("/profile", response_model=StyleScoreResponse, summary="风格评分")
 async def score_style(request: StyleScoreRequest):
     """
     评估文本的学术写作风格
@@ -258,7 +260,7 @@ async def clear_versions(document_id: str):
 
 class FullAnalysisRequest(BaseModel):
     """综合分析请求"""
-    text: str = Field(..., description="待分析文本")
+    text: str = Field(..., description="待分析文本", min_length=1)
     domain: str = Field(default="general", description="学术领域")
     target_style: Optional[str] = Field(None, description="目标风格（可选）")
 
