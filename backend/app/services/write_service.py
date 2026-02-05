@@ -2,7 +2,17 @@ from __future__ import annotations
 from typing import Dict, Any, List
 import hashlib
 import re
+import os
+import sys
 
+# allow importing from repo root (style_transfer.py is at repo root)
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from style_transfer import StyleTransfer
+
+_style_engine = StyleTransfer()
 
 def _rid(seed: str) -> str:
     return hashlib.md5(seed.encode("utf-8")).hexdigest()[:10]
@@ -39,20 +49,16 @@ def profile_text(text: str, domain: str) -> Dict[str, Any]:
 
 
 def transfer_text(text: str, target_journal: str, formality: float, domain: str) -> Dict[str, Any]:
-    request_id = _rid(text[:50] + target_journal + str(formality) + domain)
-
-    # MVP：先做“模板化改写”占位，后续接 qwen-7b-chat
-    rewritten = (
-        f"[{target_journal} style, formality={formality:.2f}] "
-        + text.replace("shows", "demonstrates").replace("we", "we (the authors)")
-    )
-    suggestions = [
-        "Prefer passive voice in methods when appropriate.",
-        "Add a contrast sentence: 'Unlike previous work, ...'.",
-        "Quantify improvements with exact numbers if available.",
-    ]
-    return {
-        "request_id": request_id,
-        "rewritten": rewritten,
-        "suggestions": suggestions,
-    }
+    try:
+        return _style_engine.transfer_for_api(
+            text=text,
+            target_journal=target_journal,
+            formality=formality,
+            domain=domain,
+        )
+    except Exception as e:
+        return {
+            "request_id": "fallback",
+            "rewritten": f"[{target_journal} style, formality={formality:.2f}] {text}",
+            "suggestions": [f"Fallback: style transfer failed: {type(e).__name__}"],
+        }
