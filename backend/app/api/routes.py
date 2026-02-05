@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from backend.app.core.cache import cache
 from backend.app.core.cache import cache, make_summary_cache_key
 
 from fastapi import APIRouter, UploadFile, File
@@ -56,5 +57,26 @@ async def write_profile(req: WriteProfileRequest):
 
 @router.post("/write/transfer", response_model=WriteTransferResponse)
 async def write_transfer(req: WriteTransferRequest):
-    result = transfer_text(req.text, req.target_journal, req.formality, req.domain)
-    return result
+    # cache key
+    key_payload = f"{req.target_journal}|{req.formality}|{req.domain}\n{req.text}"
+    key = "transfer:" + __import__("hashlib").md5(key_payload.encode("utf-8")).hexdigest()
+
+    cached = cache.get(key)
+    if cached:
+        return json.loads(cached)
+
+    try:
+        result = transfer_text(req.text, req.target_journal, req.formality, req.domain)
+        cache.set(key, json.dumps(result))
+        return result
+    except Exception:
+        # fallback: never 500 during demo
+        fallback = {
+            "request_id": "fallback",
+            "rewritten": f"[{req.target_journal} style fallback] 写作迁移服务暂不可用，已返回降级改写结果。",
+            "suggestions": [
+                "稍后重试；或降低输入长度。",
+                "检查模型服务是否可用/是否超时。",
+            ],
+        }
+        return fallback

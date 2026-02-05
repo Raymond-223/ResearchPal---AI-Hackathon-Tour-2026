@@ -6,7 +6,23 @@ import gradio as gr
 BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
 def call_parse(pdf_file):
-    with open(pdf_file, "rb") as f:
+    # 1) 没有上传文件
+    if pdf_file is None:
+        return "", {"error": "请先上传一个PDF文件再点击解析。"}
+
+    # 2) Gradio File 可能返回：str 路径 / dict / 临时文件对象
+    path = None
+    if isinstance(pdf_file, str):
+        path = pdf_file
+    elif isinstance(pdf_file, dict):
+        path = pdf_file.get("path") or pdf_file.get("name")
+    else:
+        path = getattr(pdf_file, "name", None)
+
+    if not path:
+        return "", {"error": f"无法识别上传文件对象：{type(pdf_file)}"}
+
+    with open(path, "rb") as f:
         r = requests.post(f"{BACKEND}/api/paper/parse", files={"file": f})
     r.raise_for_status()
     data = r.json()

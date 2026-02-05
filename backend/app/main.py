@@ -11,7 +11,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
-
+# bash scripts/run_frontend.sh
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
@@ -48,3 +48,7 @@ async def health():
     return {"ok": True, "name": settings.app_name}
 
 app.include_router(router, prefix="/api")
+
+@app.get("/")
+async def root():
+    return {"ok": True, "msg": "ResearchPal backend is running. Visit /docs or /health."}
