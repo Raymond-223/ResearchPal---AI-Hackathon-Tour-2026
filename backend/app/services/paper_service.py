@@ -1,9 +1,10 @@
+
 from __future__ import annotations
 from typing import Dict, Any
 import hashlib
 import fitz  # PyMuPDF
 
-
+from summary_generator import generate_short_summary, generate_long_summary
 def _rid(seed: str) -> str:
     return hashlib.md5(seed.encode("utf-8")).hexdigest()[:10]
 
@@ -38,26 +39,24 @@ def parse_pdf_bytes(pdf_bytes: bytes) -> Dict[str, Any]:
     }
 
 
-def summarize_text(text: str, mode: str) -> Dict[str, Any]:
-    """
-    仍是 mock 摘要：你后面只需要在这里接入算法A的 bart/qwen 即可
-    """
-    request_id = _rid(text[:50] + mode)
-    one_liner = f"【1分钟速览】(mock) This paper proposes an approach in mode={mode}."
-    detailed = (
-        "【10分钟精读】(mock)\n"
-        "- Method: ...\n"
-        "- Experiments: ...\n"
-        "- Results: ...\n"
-    )
-    mermaid = """graph TD
-A[Paper] --> B[Method]
-A --> C[Experiments]
-B --> D[Contribution]
-"""
+import uuid
+from typing import Dict, Any
+
+def summarize_text(text: str, mode: str = "mvp") -> Dict[str, Any]:
+    structured = {"preamble": text}
+
+    one_liner = generate_short_summary(structured)
+
+    long_pack = generate_long_summary(structured)
+    # long_pack = {"sections": {...}, "full_text": "..."}
+    detailed = long_pack.get("full_text", "")
+
+    # 先保持你们现有 mermaid 生成逻辑；如果没有就返回空字符串
+    mermaid = ""  # or your existing mermaid builder
+
     return {
-        "request_id": request_id,
-        "one_liner": one_liner,
-        "detailed": detailed,
+        "request_id": str(uuid.uuid4()),
+        "one_liner": f"【1分钟速览】{one_liner}",
+        "detailed": f"【10分钟精读】{detailed}",
         "mermaid": mermaid,
     }
