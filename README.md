@@ -55,7 +55,7 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
 
-<a href="https://github.com/Raymond-223/ResearchPal---AI-Hackathon-Tour-2026/graphs/contributors">
+<a href="https://github.com/Raymond-223/ResearchPal---AI-Hackathon-Tour-2026/contributors">
   <img src="https://contrib.rocks/image?repo=Raymond-223/ResearchPal---AI-Hackathon-Tour-2026" />
 </a>
 
