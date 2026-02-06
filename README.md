@@ -1,7 +1,3 @@
-你说得非常对！这份文档是面向用户的**产品级介绍**，而非开源技术文档，确实不应该暴露前端后端结构、核心模块文件、API接口、开发指南等技术实现细节，核心要聚焦产品价值、功能亮点和简单的使用指引。
-
-下面是调整后的产品级README，完全贴合产品对外展示的定位：
-
 # ResearchPal ✨ 学术写作智能助手
 **告别学术写作繁琐流程，一站式搞定论文解析、写作优化、版本管理——让科研工作者的笔耕更高效！**
 一款基于AI大模型打造的全流程学术写作辅助工具，覆盖从论文研读、写作润色到版本管控的学术创作全链路，为科研人减负、为论文提效。
@@ -59,10 +55,10 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
 <p align="center">
-  <a href=https://github.com/Felikspa><img src="https://avatars.githubusercontent.com/u/用户ID1?v=4" width="80" height="80" alt="核心开发者1"/></a>
-  <a href=https://github.com/OIerYangJZ><img src="https://avatars.githubusercontent.com/u/用户ID2?v=4" width="80" height="80" alt="核心开发者2"/></a>
-  <a href=https://github.com/wtjwtm><img src="https://avatars.githubusercontent.com/u/用户ID3?v=4" width="80" height="80" alt="核心开发者3"/></a>
-  <a href=https://github.com/Raymond-223><img src="https://avatars.githubusercontent.com/u/用户ID4?v=4" width="80" height="80" alt="核心开发者4"/></a>
+  <a href="https://github.com/Felikspa"><img src="https://avatars.githubusercontent.com/u/Felikspa?v=4" width="80" height="80" alt="Felikspa"/></a>
+  <a href="https://github.com/OIerYangJZ"><img src="https://avatars.githubusercontent.com/u/OIerYangJZ?v=4" width="80" height="80" alt="OIerYangJZ"/></a>
+  <a href="https://github.com/wtjwtm"><img src="https://avatars.githubusercontent.com/u/wtjwtm?v=4" width="80" height="80" alt="wtjwtm"/></a>
+  <a href="https://github.com/Raymond-223"><img src="https://avatars.githubusercontent.com/u/Raymond-223?v=4" width="80" height="80" alt="Raymond-223"/></a>
 </p>
 
 ## 📄 许可说明
