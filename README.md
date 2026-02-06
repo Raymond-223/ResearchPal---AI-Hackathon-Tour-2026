@@ -1,193 +1,80 @@
-# 论文解析与摘要生成算法库
+你说得非常对！这份文档是面向用户的**产品级介绍**，而非开源技术文档，确实不应该暴露前端后端结构、核心模块文件、API接口、开发指南等技术实现细节，核心要聚焦产品价值、功能亮点和简单的使用指引。
 
-## 项目简介
+下面是调整后的产品级README，完全贴合产品对外展示的定位：
 
-本算法库旨在为学术论文提供自动化解析、摘要生成和可视化功能，帮助研究人员快速理解论文核心内容。通过"1分钟抓核心、10分钟知全貌"的设计理念，实现高效的论文阅读体验。
+# ResearchPal ✨ 学术写作智能助手
+**告别学术写作繁琐流程，一站式搞定论文解析、写作优化、版本管理——让科研工作者的笔耕更高效！**
+一款基于AI大模型打造的全流程学术写作辅助工具，覆盖从论文研读、写作润色到版本管控的学术创作全链路，为科研人减负、为论文提效。
 
-## 核心功能
+## 产品简介
+ResearchPal 聚焦科研工作者的学术写作核心痛点，将AI大模型能力与专业学术场景深度结合，无需切换多款工具，一个平台即可满足从论文研读、初稿撰写到终稿打磨的全流程需求：
+- 📄 一键解析PDF论文，自动提取核心信息、生成多粒度摘要，告别低效研读
+- ✍️ 中英双语语法检查+期刊风格适配，AI精准润色，贴合学术规范
+- 🔄 自动追踪写作版本、高亮对比修改差异，再也不怕误删丢稿
 
-### 1. PDF解析模块 (`paper_parser.py`)
-- **文本提取**：支持PDF文件流和本地文件路径输入
-- **章节结构化**：自动识别摘要、引言、方法、实验、结论等章节
-- **公式图表识别**：标记公式和图表位置，生成占位符
-- **元数据补全**：通过ArXiv API获取论文元数据（标题、作者、发表日期等）
+适配Nature/Science/IEEE等主流期刊写作风格，兼顾实用性与专业性，让科研人从繁琐的写作辅助工作中解放，更专注于研究本身。
 
-### 2. 摘要生成模块 (`summary_generator.py`)
-- **1分钟速览**：生成150词以内的核心贡献和创新点摘要
-- **10分钟精读**：分章节生成详细摘要（研究背景、方法、结果、结论）
-- **关键词提取**：自动提取TOP10核心关键词，包含词频和释义
-- **智能降级**：当模型加载失败时，使用规则化方法生成摘要
+## 🌟 核心功能
+### 📄 论文智能解析·高效研读
+无需手动整理，AI一键挖掘论文核心价值，大幅节省研读时间：
+- PDF智能解析：自动提取结构化文本、公式、图表位置，还原论文逻辑
+- 多粒度摘要：1分钟速览核心结论+10分钟精读深度报告，按需选择研读维度
+- 关键词提取：智能识别核心术语并附专业释义，快速掌握研究重点
+- 引用关系图谱：可视化展示参考文献网络，清晰梳理研究脉络
 
-### 3. 可视化辅助模块 (`visual_helper.py`)
-- **引用关系图谱**：生成Mermaid格式的引用关系图
-- **图表描述生成**：为论文中的图表生成结构化描述
-- **经典论文识别**：自动标记经典论文，在图谱中突出显示
+### ✍️ 写作质量优化·专业润色
+AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准：
+- 中英双语语法检查：智能检测语法错误并给出精准修正建议
+- 多维度风格评分：从正式度、术语匹配度、句子复杂度综合评估写作质量
+- 主流期刊风格适配：一键迁移至Nature/Science/IEEE等期刊写作风格
+- 实时文本优化：智能替换口语化表达、消除冗余内容，提升文本流畅度
 
-## 技术架构
+### 🔄 版本智能管理·安全可控
+自动追踪写作过程，直观对比修改差异，写作过程全程可追溯：
+- 历史版本自动追踪：全程记录写作各版本，无需手动保存
+- 差异对比高亮展示：精准标注文本增删改内容，修改痕迹一目了然
+- 任意版本回溯恢复：支持多版本间对比、一键恢复至指定版本
 
-### 依赖库
-- `PyMuPDF` (fitz)：PDF文件解析
-- `requests`：API调用
-- `modelscope`（可选）：摘要生成模型
-- `re`, `json`, `time`, `collections`：标准库
-
-### 算法流程
-1. **输入处理**：接收PDF文件（bytes或文件路径）
-2. **文本提取**：逐页提取文本，进行章节结构化
-3. **元数据获取**：调用ArXiv API补充论文元数据
-4. **摘要生成**：基于结构化文本生成多粒度摘要
-5. **关键词提取**：统计词频并结合专业术语知识库
-6. **可视化生成**：创建引用图谱和图表描述
-7. **结果输出**：返回统一格式的JSON结果
-
-## 使用示例
-
-### 基础API使用
-
-```python
-from paper_parser import parse_paper
-from summary_generator import pack_summary_result
-from visual_helper import generate_citation_graph, generate_figure_description
-
-# 1. 解析PDF
-parse_result = parse_paper("example_paper.pdf")
-
-# 2. 生成摘要
-summary_result = pack_summary_result(parse_result['text_data']['structured_text'])
-
-# 3. 生成可视化数据
-citation_graph = generate_citation_graph(parse_result['text_data']['structured_text'])
-figure_descriptions = generate_figure_description(
-    parse_result['text_data']['structured_text'],
-    parse_result['text_data']['figures']
-)
-
-# 4. 获取结果
-short_summary = summary_result['short_summary']
-long_summary = summary_result['long_summary']['full_text']
-keywords = summary_result['keywords']
-mermaid_code = citation_graph['mermaid_code']
-```
-
-详细使用示例请参考 `example_usage.py`。
-
-### 论文分析工具使用
-
-```python
-from paper_analyzer import PaperAnalyzer
-
-# 创建分析器
-analyzer = PaperAnalyzer()
-
-# 分析论文
-if analyzer.analyze_paper("example_paper.pdf"):
-    # 生成短概要
-    short_summary = analyzer.generate_short_summary()
-    print("短概要：")
-    print(short_summary)
-    
-    # 生成详细分析报告
-    long_summary = analyzer.generate_long_summary()
-    print("\n详细分析报告：")
-    print(long_summary)
-    
-    # 保存结果
-    analyzer.save_results("analysis_results")
-```
-
-命令行使用：
-```bash
-python paper_analyzer.py example_paper.pdf --output-dir analysis_results --mode both
-```
-
-## 核心API
-
-### `parse_paper(pdf_input, arxiv_id=None, doi=None, title=None)`
-- **功能**：完整的论文解析流程
-- **参数**：
-  - `pdf_input`：PDF输入（bytes或文件路径）
-  - `arxiv_id`：ArXiv ID（可选）
-  - `doi`：DOI编号（可选）
-  - `title`：论文标题（可选）
-- **返回**：包含文本数据、元数据的字典
-
-### `pack_summary_result(structured_text)`
-- **功能**：封装摘要结果
-- **参数**：`structured_text`：结构化的论文文本
-- **返回**：包含短摘要、长摘要、关键词的字典
-
-### `generate_citation_graph(structured_text)`
-- **功能**：生成引用关系图谱
-- **参数**：`structured_text`：结构化的论文文本
-- **返回**：包含Mermaid代码和参考文献列表的字典
-
-### `generate_figure_description(structured_text, figures)`
-- **功能**：为图表生成文本描述
-- **参数**：
-  - `structured_text`：结构化的论文文本
-  - `figures`：图表信息列表
-- **返回**：图表描述列表
-
-## 性能指标
-
-- **处理速度**：单篇论文解析≤20秒，摘要生成≤10秒
-- **内存占用**：支持处理≤20MB的PDF文件
-- **并发能力**：支持5人并发调用无卡顿
-- **准确率**：摘要内容准确率≥80%，图表描述匹配度≥70%
-
-## 错误处理
-
-### 常见错误类型
-1. **文件格式错误**：无法解析的PDF格式
-2. **加密文件错误**：加密的PDF文件
-3. **API调用失败**：ArXiv API超时或无结果
-4. **模型加载失败**：modelscope未安装或模型加载失败
-
-### 降级策略
-- 文件解析失败时返回明确错误信息
-- API调用失败时使用空元数据
-- 模型加载失败时使用规则化摘要方法
-
-## 测试与验证
-
-运行测试用例：
-```bash
-python test_cases.py
-```
-
-测试覆盖：
-- PDF解析功能（文本提取、章节识别、公式图表标记）
-- 摘要生成功能（长短摘要、关键词提取）
-- 可视化功能（引用图谱、图表描述）
-- 异常处理（文件错误、API失败、模型加载失败）
-
-## 部署说明
-
-### 安装依赖
-```bash
-pip install PyMuPDF requests
-# 可选：安装modelscope以使用高级摘要模型
-pip install modelscope>=1.10.0
-```
-
+## 🚀 快速使用
 ### 环境要求
-- Python 3.7+
-- PyMuPDF 1.18.0+
-- requests 2.0.0+
-- modelscope 1.10.0+（可选）
+- 操作系统：Windows 10+/macOS 10.15+/Linux（64位）
+- 运行环境：Python 3.8+（仅需基础环境，无需额外配置依赖）
+- 硬件要求：内存≥8GB（保障AI功能高效运行）
 
-## 后续优化方向
+### 一键启动
+1. 获取安装包：联系我们获取ResearchPal安装包，解压至本地目录
+2. 安装依赖：执行自动安装脚本，一键配置运行环境
+   ```bash
+   ./install.sh  # Linux/macOS
+   # 或
+   install.bat   # Windows
+   ```
+3. 启动应用：双击启动脚本，打开浏览器访问 `http://localhost:7860` 即可使用
+   ```bash
+   ./start.sh  # Linux/macOS
+   # 或
+   start.bat   # Windows
+   ```
 
-1. **多语言支持**：扩展对中文、日文等多语言论文的支持
-2. **模型优化**：接入更多预训练模型，提升摘要质量
-3. **知识图谱**：构建论文知识图谱，支持论文间关联分析
-4. **交互式可视化**：提供更丰富的可视化交互功能
-5. **批量处理**：支持批量论文解析和对比分析
+## 👥 项目团队
+**核心开发者（GitHub头像点击可跳转主页）**
+<p align="center">
+  <a href=https://github.com/Felikspa><img src="https://avatars.githubusercontent.com/u/用户ID1?v=4" width="80" height="80" alt="核心开发者1"/></a>
+  <a href=https://github.com/OIerYangJZ><img src="https://avatars.githubusercontent.com/u/用户ID2?v=4" width="80" height="80" alt="核心开发者2"/></a>
+  <a href=https://github.com/wtjwtm><img src="https://avatars.githubusercontent.com/u/用户ID3?v=4" width="80" height="80" alt="核心开发者3"/></a>
+  <a href=https://github.com/Raymond-223><img src="https://avatars.githubusercontent.com/u/用户ID4?v=4" width="80" height="80" alt="核心开发者4"/></a>
+</p>
 
-## 许可证
+## 📄 许可说明
+本产品采用 MIT 许可证授权，仅供科研非商用场景使用，商用请联系团队获取授权。
 
-MIT License
+## 🙏 技术支持
+本产品的研发依托以下优秀开源生态，在此表示衷心感谢：
+- 大模型能力：ModelScope 开放模型平台
+- PDF解析：PyMuPDF 高效解析引擎
+- 交互界面：Gradio 可视化框架
+- 后端架构：FastAPI 高性能框架
 
-## 联系方式
-
-如有问题或建议，请联系：算法工程师A
+---
+**ResearchPal - 让学术写作更轻松，让科研人更专注于研究本身 ✨**
+如果这个工具对你的科研工作有帮助，欢迎给项目点个⭐️星标支持！
