@@ -54,9 +54,10 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
-<a href="https://github.com/Raymond-223/ResearchPal---AI-Hackathon-Tour-2026/graphs/contributors">
-  <img src="https://github.com/Raymond-223/ResearchPal---AI-Hackathon-Tour-2026/graphs/contributors" />
-</a>
+<!-- GitHub Readme Stats 贡献者卡片 -->
+<img src="https://github-readme-stats.vercel.app/api/contributors?repo=ResearchPal---AI-Hackathon-Tour-2026&owner=Raymond-223&show_icons=true&theme=default" 
+     alt="Contributors" 
+     style="width: 100%; max-width: 800px;"/>
 
 ## 📄 许可说明
 本产品采用 MIT 许可证授权，仅供科研非商用场景使用，商用请联系团队获取授权。
