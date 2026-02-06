@@ -55,20 +55,9 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
 
-<p align="center">
-  <a href="https://github.com/Felikspa" target="_blank">
-    <img src="https://avatars.githubusercontent.com/Felikspa?size=80&v=4" width="80" height="80" alt="Felikspa" style="border-radius:50%">
-  </a>
-  <a href="https://github.com/OIerYangJZ" target="_blank">
-    <img src="https://avatars.githubusercontent.com/OIerYangJZ?size=80&v=4" width="80" height="80" alt="OIerYangJZ" style="border-radius:50%">
-  </a>
-  <a href="https://github.com/wtjwtm" target="_blank">
-    <img src="https://avatars.githubusercontent.com/wtjwtm?size=80&v=4" width="80" height="80" alt="wtjwtm" style="border-radius:50%">
-  </a>
-  <a href="https://github.com/Raymond-223" target="_blank">
-    <img src="https://avatars.githubusercontent.com/Raymond-223?size=80&v=4" width="80" height="80" alt="Raymond-223" style="border-radius:50%">
-  </a>
-</p>
+<a href="https://github.com/Raymond-223/ResearchPal---AI-Hackathon-Tour-2026/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Raymond-223/ResearchPal---AI-Hackathon-Tour-2026" />
+</a>
 
 ## 📄 许可说明
 本产品采用 MIT 许可证授权，仅供科研非商用场景使用，商用请联系团队获取授权。
