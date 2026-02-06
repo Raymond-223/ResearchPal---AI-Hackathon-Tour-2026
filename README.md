@@ -55,10 +55,16 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
 <p align="center">
-  <a href="https://github.com/Felikspa" style="margin: 0 8px;"><img src="https://avatars.githubusercontent.com/Felikspa" width="80" height="80" alt="Felikspa" style="border-radius: 50\%; object-fit: cover;"/></a>
-  <a href="https://github.com/OIerYangJZ" style="margin: 0 8px;"><img src="https://avatars.githubusercontent.com/OIerYangJZ" width="80" height="80" alt="OIerYangJZ" style="border-radius: 50\%; object-fit: cover;"/></a>
-  <a href="https://github.com/wtjwtm" style="margin: 0 8px;"><img src="https://avatars.githubusercontent.com/wtjwtm" width="80" height="80" alt="wtjwtm" style="border-radius: 50\%; object-fit: cover;"/></a>
-  <a href="https://github.com/Raymond-223" style="margin: 0 8px;"><img src="https://avatars.githubusercontent.com/Raymond-223" width="80" height="80" alt="Raymond-223" style="border-radius: 50\%; object-fit: cover;"/></a>
+  <img src="https://avatars.githubusercontent.com/Felikspa?s=80&v=4" alt="Felikspa" style="border-radius: 50\% ; margin: 0 8px;" width="80" height="80">
+  <img src="https://avatars.githubusercontent.com/OIerYangJZ?s=80&v=4" alt="OIerYangJZ" style="border-radius: 50\% ; margin: 0 8px;" width="80" height="80">
+  <img src="https://avatars.githubusercontent.com/wtjwtm?s=80&v=4" alt="wtjwtm" style="border-radius: 50\% ; margin: 0 8px;" width="80" height="80">
+  <img src="https://avatars.githubusercontent.com/Raymond-223?s=80&v=4" alt="Raymond-223" style="border-radius: 50\% ; margin: 0 8px;" width="80" height="80">
+</p>
+<p align="center">
+  <a href="https://github.com/Felikspa">Felikspa</a> · 
+  <a href="https://github.com/OIerYangJZ">OIerYangJZ</a> · 
+  <a href="https://github.com/wtjwtm">wtjwtm</a> · 
+  <a href="https://github.com/Raymond-223">Raymond-223</a>
 </p>
 
 ## 📄 许可说明
