@@ -55,10 +55,10 @@ AI精准打磨文本，适配期刊规范，让论文写作更符合学术标准
 ## 👥 项目团队
 **核心开发者（GitHub头像点击可跳转主页）**
 <p align="center">
-  <a href="https://github.com/Felikspa"><img src="https://avatars.githubusercontent.com/u/Felikspa?v=4" width="80" height="80" alt="Felikspa"/></a>
-  <a href="https://github.com/OIerYangJZ"><img src="https://avatars.githubusercontent.com/u/OIerYangJZ?v=4" width="80" height="80" alt="OIerYangJZ"/></a>
-  <a href="https://github.com/wtjwtm"><img src="https://avatars.githubusercontent.com/u/wtjwtm?v=4" width="80" height="80" alt="wtjwtm"/></a>
-  <a href="https://github.com/Raymond-223"><img src="https://avatars.githubusercontent.com/u/Raymond-223?v=4" width="80" height="80" alt="Raymond-223"/></a>
+  <a href="https://github.com/Felikspa"><img src="https://avatars.githubusercontent.com/u/Felikspa?v=4" width="80" height="80" style="border-radius: 50\%" alt="Felikspa"/></a>
+  <a href="https://github.com/OIerYangJZ"><img src="https://avatars.githubusercontent.com/u/OIerYangJZ?v=4" width="80" height="80" style="border-radius: 50\%" alt="OIerYangJZ"/></a>
+  <a href="https://github.com/wtjwtm"><img src="https://avatars.githubusercontent.com/u/wtjwtm?v=4" width="80" height="80" style="border-radius: 50\%" alt="wtjwtm"/></a>
+  <a href="https://github.com/Raymond-223"><img src="https://avatars.githubusercontent.com/u/Raymond-223?v=4" width="80" height="80" style="border-radius: 50\%" alt="Raymond-223"/></a>
 </p>
 
 ## 📄 许可说明
