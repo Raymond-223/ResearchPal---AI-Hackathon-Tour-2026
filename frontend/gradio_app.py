@@ -28,8 +28,8 @@ def call_parse(pdf_file):
     data = r.json()
     return data.get("full_text", ""), data
 
-def call_summary(text, mode):
-    r = requests.post(f"{BACKEND}/api/paper/summary", json={"text": text, "mode": mode})
+def call_summary(text, mode, model):
+    r = requests.post(f"{BACKEND}/api/paper/summary", json={"text": text, "mode": mode, "model": model})
     r.raise_for_status()
     d = r.json()
     return d["one_liner"], d["detailed"], d["mermaid"]
@@ -40,14 +40,27 @@ def call_profile(text, domain):
     d = r.json()
     return d["lexical"], d["structural"], "\n".join(d["diagnostics"])
 
-def call_transfer(text, journal, formality, domain):
+def call_transfer(text, journal, formality, domain, model):
     r = requests.post(
         f"{BACKEND}/api/write/transfer",
-        json={"text": text, "target_journal": journal, "formality": formality, "domain": domain},
+        json={"text": text, "target_journal": journal, "formality": formality, "domain": domain, "model": model},
     )
     r.raise_for_status()
     d = r.json()
     return d["rewritten"], "\n".join(d["suggestions"])
+
+def get_models():
+    """Fetch available models from backend"""
+    default_models = [("MVP Default (Mock)", "mvp-default")]
+    try:
+        r = requests.get(f"{BACKEND}/api/models", timeout=3)
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            if data:
+                return [(m["name"] if "name" in m else m["id"], m["id"]) for m in data]
+    except Exception as e:
+        print(f"Failed to fetch models: {e}")
+    return default_models
 
 # 自定义CSS
 custom_css = """
@@ -284,6 +297,8 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             """)
         with gr.Column(scale=2, min_width=300):
             with gr.Row():
+                # 模型选择下拉框
+                model_select = gr.Dropdown(choices=[], value="mvp-default", label="Model / 模型", interactive=True, scale=3)
                 # 语言切换按钮
                 lang_btn = gr.Radio(choices=[("English", "en"), ("中文", "zh")], value="en", label="Language / 语言", interactive=True, scale=2)
                 # 深色模式按钮
@@ -291,6 +306,9 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                 
     # 绑定深色模式切换事件
     dark_btn.click(None, None, None, js=toggle_theme())
+    
+    # 页面加载时获取模型列表
+    demo.load(get_models, outputs=[model_select])
 
     with gr.Tabs() as tabs:
         # ==================== Tab 1: 论文深度解析 ====================
@@ -368,7 +386,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
 
             summary_btn.click(
                 call_summary,
-                inputs=[parsed_text_hidden, mode_select],
+                inputs=[parsed_text_hidden, mode_select, model_select],
                 outputs=[one_liner_output, detailed_output, mermaid_output]
             )
 
@@ -439,7 +457,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             
             transfer_btn.click(
                 call_transfer,
-                inputs=[text_input, journal_select, formality_slider, domain_select],
+                inputs=[text_input, journal_select, formality_slider, domain_select, model_select],
                 outputs=[rewritten_output, suggestions_output]
             )
 

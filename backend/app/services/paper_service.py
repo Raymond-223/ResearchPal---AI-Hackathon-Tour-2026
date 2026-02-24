@@ -40,9 +40,47 @@ def parse_pdf_bytes(pdf_bytes: bytes) -> Dict[str, Any]:
 
 
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+import uuid
+from backend.app.services.model_service import call_genstudio_chat
 
-def summarize_text(text: str, mode: str = "mvp") -> Dict[str, Any]:
+def summarize_text(text: str, mode: str = "mvp", model: Optional[str] = None) -> Dict[str, Any]:
+    # 1. Try GenStudio API if model is specified
+    if model and model != "mvp-default" and not model.startswith("error"):
+        try:
+            # Simple strategy: call twice for one-liner and detailed
+            # Truncate text to avoid context limit issues (simple approach)
+            truncated_text = text[:8000] 
+            
+            # One Liner
+            messages_one = [
+                {"role": "system", "content": "You are a helpful academic assistant."},
+                {"role": "user", "content": f"Please provide a one-sentence summary of the following paper text:\n\n{truncated_text}"}
+            ]
+            one_liner = call_genstudio_chat(messages_one, model)
+            
+            # Detailed
+            messages_detail = [
+                {"role": "system", "content": "You are a helpful academic assistant."},
+                {"role": "user", "content": f"Please provide a detailed summary (about 300 words) of the following paper text, covering the key contributions, methods, and results:\n\n{truncated_text}"}
+            ]
+            detailed = call_genstudio_chat(messages_detail, model)
+            
+            # Mermaid (Optional, prompt engineering required)
+            # For now, fallback to empty or mock for graph
+            mermaid = ""
+            
+            return {
+                "request_id": str(uuid.uuid4()),
+                "one_liner": one_liner,
+                "detailed": detailed,
+                "mermaid": mermaid,
+            }
+        except Exception as e:
+            print(f"GenStudio API call failed: {e}. Falling back to local logic.")
+            # Fallback to local logic below
+
+    # 2. Local Mock Logic (Fallback)
     structured = {"preamble": text}
 
     one_liner = generate_short_summary(structured)

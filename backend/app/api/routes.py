@@ -13,11 +13,20 @@ from shared.schemas import (
     WriteProfileResponse,
     WriteTransferRequest,
     WriteTransferResponse,
+    ModelListResponse,
 )
 from backend.app.services.paper_service import parse_pdf_bytes, summarize_text
 from backend.app.services.write_service import profile_text, transfer_text
+from backend.app.services.model_service import get_available_models
 
 router = APIRouter()
+
+
+@router.get("/models", response_model=ModelListResponse)
+async def list_models():
+    models = get_available_models()
+    return {"data": models}
+
 
 
 @router.post("/paper/parse", response_model=PaperParseResponse)
@@ -29,13 +38,14 @@ async def paper_parse(file: UploadFile = File(...)):
 
 @router.post("/paper/summary", response_model=PaperSummaryResponse)
 async def paper_summary(req: PaperSummaryRequest):
-    key = make_summary_cache_key(req.text, req.mode)
+    # Pass model to service
+    key = make_summary_cache_key(req.text, req.mode + str(req.model))
     cached = cache.get(key)
     if cached:
         return json.loads(cached)
 
     try:
-        result = summarize_text(req.text, req.mode)
+        result = summarize_text(req.text, req.mode, req.model)
         cache.set(key, json.dumps(result))
         return result
     except Exception:
@@ -58,7 +68,7 @@ async def write_profile(req: WriteProfileRequest):
 @router.post("/write/transfer", response_model=WriteTransferResponse)
 async def write_transfer(req: WriteTransferRequest):
     # cache key
-    key_payload = f"{req.target_journal}|{req.formality}|{req.domain}\n{req.text}"
+    key_payload = f"{req.target_journal}|{req.formality}|{req.domain}|{req.model}\n{req.text}"
     key = "transfer:" + __import__("hashlib").md5(key_payload.encode("utf-8")).hexdigest()
 
     cached = cache.get(key)
@@ -66,7 +76,7 @@ async def write_transfer(req: WriteTransferRequest):
         return json.loads(cached)
 
     try:
-        result = transfer_text(req.text, req.target_journal, req.formality, req.domain)
+        result = transfer_text(req.text, req.target_journal, req.formality, req.domain, req.model)
         cache.set(key, json.dumps(result))
         return result
     except Exception:

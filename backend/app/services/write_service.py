@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+import uuid
+from backend.app.services.model_service import call_genstudio_chat
 import hashlib
 import re
 import os
@@ -48,7 +50,35 @@ def profile_text(text: str, domain: str) -> Dict[str, Any]:
     }
 
 
-def transfer_text(text: str, target_journal: str, formality: float, domain: str) -> Dict[str, Any]:
+def transfer_text(text: str, target_journal: str, formality: float, domain: str, model: Optional[str] = None) -> Dict[str, Any]:
+    # 1. Try GenStudio API if model is specified
+    if model and model != "mvp-default" and not model.startswith("error"):
+        try:
+            # Rewrite
+            messages_rewrite = [
+                {"role": "system", "content": "You are an expert academic editor."},
+                {"role": "user", "content": f"Rewrite the following text for {target_journal} style (Formality: {formality}, Domain: {domain}):\n\n{text}"}
+            ]
+            rewritten = call_genstudio_chat(messages_rewrite, model)
+            
+            # Suggestions
+            messages_suggest = [
+                {"role": "system", "content": "You are an expert academic editor."},
+                {"role": "user", "content": f"Provide 3 brief suggestions to improve the following text for {target_journal}:\n\n{text}"}
+            ]
+            suggestions_text = call_genstudio_chat(messages_suggest, model)
+            suggestions = [line.strip('- *') for line in suggestions_text.split('\n') if line.strip()]
+            
+            return {
+                "request_id": str(uuid.uuid4()),
+                "rewritten": rewritten,
+                "suggestions": suggestions
+            }
+        except Exception as e:
+            print(f"GenStudio rewrite failed: {e}. Falling back to local logic.")
+            # Fallback to local logic
+
+    # 2. Local Mock Logic (Fallback)
     try:
         return _style_engine.transfer_for_api(
             text=text,

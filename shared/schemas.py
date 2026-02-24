@@ -10,6 +10,10 @@ class ErrorResponse(BaseModel):
     request_id: str
 
 
+class ModelListResponse(BaseModel):
+    data: List[Dict[str, Any]] = []
+
+
 # -------- Paper --------
 class PaperParseResponse(BaseModel):
     request_id: str
@@ -23,6 +27,7 @@ class PaperParseResponse(BaseModel):
 class PaperSummaryRequest(BaseModel):
     text: str
     mode: str = Field("mvp", description="mvp|fast|deep")
+    model: Optional[str] = None  # New field for model selection
 
 
 class PaperSummaryResponse(BaseModel):
