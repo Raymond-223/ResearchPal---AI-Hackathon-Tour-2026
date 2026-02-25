@@ -93,14 +93,18 @@ def generate_short_summary(structured_text: Dict[str, str]) -> str:
     # 清理输入文本（移除占位符）
     input_text = _clean_text(input_text)
     
-    # 提示词工程
-    SHORT_SUMMARY_PROMPT = (
-        "请提供这篇学术论文的核心贡献和创新点摘要，重点包括：\n"
-        "1. 解决了什么问题\n"
-        "2. 提出了什么创新方法或模型\n"
-        "3. 取得了什么显著成果\n"
-        "请用简洁专业的语言，控制在150词以内。"
-    )
+    # 提示词工程 - 优化版
+    SHORT_SUMMARY_PROMPT = """作为学术论文分析专家，请提取以下论文的核心贡献和创新点。
+
+请按以下结构输出：
+1. **研究问题**: 解决了什么问题（1句话）
+2. **核心创新**: 提出了什么新方法/模型（2句话）
+3. **主要成果**: 取得了什么显著成果（1句话，包含具体数据）
+
+要求：
+- 使用简洁专业的学术语言
+- 突出论文的核心价值
+- 控制在150词以内"""
     
     try:
         # 尝试使用模型生成摘要
@@ -148,8 +152,8 @@ def generate_long_summary(structured_text: Dict[str, str]) -> Dict[str, str]:
     
     if background_text:
         long_summary['background'] = _generate_section_summary(
-            background_text, 
-            "请总结这篇论文的研究背景和动机，包括：\n1. 研究领域的现状\n2. 存在的主要问题\n3. 研究的重要性",
+            background_text,
+            "请总结这篇论文的研究背景和动机，包括：\n1. 研究领域的现状和发展趋势\n2. 存在的主要问题和挑战\n3. 研究的重要性和实际应用价值\n4. 为什么需要解决这个问题",
             SECTION_SUMMARY_MAX_LENGTH
         )
     
@@ -161,7 +165,7 @@ def generate_long_summary(structured_text: Dict[str, str]) -> Dict[str, str]:
     if method_text:
         long_summary['method'] = _generate_section_summary(
             method_text,
-            "请总结这篇论文提出的研究方法或算法，包括：\n1. 核心思想\n2. 技术细节\n3. 与现有方法的区别",
+            "请总结这篇论文提出的研究方法或算法，包括：\n1. 核心思想和创新点\n2. 关键技术细节和架构\n3. 与现有方法的区别和优势\n4. 方法的适用条件和范围",
             SECTION_SUMMARY_MAX_LENGTH
         )
     
@@ -175,7 +179,7 @@ def generate_long_summary(structured_text: Dict[str, str]) -> Dict[str, str]:
     if result_text:
         long_summary['results'] = _generate_section_summary(
             result_text,
-            "请总结这篇论文的主要实验结果，包括：\n1. 使用的数据集\n2. 评估指标\n3. 关键实验发现\n4. 性能提升",
+            "请总结这篇论文的主要实验结果，包括：\n1. 使用的数据集和实验设置\n2. 评估指标和基准方法\n3. 关键实验发现和定量结果\n4. 性能提升幅度（与SOTA对比）\n5. 消融实验结论",
             SECTION_SUMMARY_MAX_LENGTH
         )
     
@@ -189,7 +193,7 @@ def generate_long_summary(structured_text: Dict[str, str]) -> Dict[str, str]:
     if conclusion_text:
         long_summary['conclusion'] = _generate_section_summary(
             conclusion_text,
-            "请总结这篇论文的主要结论和未来展望，包括：\n1. 研究贡献\n2. 局限性\n3. 未来研究方向",
+            "请总结这篇论文的主要结论和未来展望，包括：\n1. 主要贡献和成就\n2. 方法的局限性和不足\n3. 失败案例和原因分析\n4. 未来研究方向和改进建议\n5. 潜在的应用场景",
             SECTION_SUMMARY_MAX_LENGTH
         )
     

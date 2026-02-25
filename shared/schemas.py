@@ -28,6 +28,7 @@ class PaperSummaryRequest(BaseModel):
     text: str
     mode: str = Field("mvp", description="mvp|fast|deep")
     model: Optional[str] = None  # New field for model selection
+    language: str = Field("en", description="en|zh - output language")
 
 
 class PaperSummaryResponse(BaseModel):

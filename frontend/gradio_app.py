@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import time
 import requests
 import gradio as gr
 
@@ -28,8 +29,8 @@ def call_parse(pdf_file):
     data = r.json()
     return data.get("full_text", ""), data
 
-def call_summary(text, mode, model):
-    r = requests.post(f"{BACKEND}/api/paper/summary", json={"text": text, "mode": mode, "model": model})
+def call_summary(text, mode, model, language):
+    r = requests.post(f"{BACKEND}/api/paper/summary", json={"text": text, "mode": mode, "model": model, "language": language})
     r.raise_for_status()
     d = r.json()
     return d["one_liner"], d["detailed"], d["mermaid"]
@@ -49,18 +50,255 @@ def call_transfer(text, journal, formality, domain, model):
     d = r.json()
     return d["rewritten"], "\n".join(d["suggestions"])
 
+
+# ============== 流式处理函数 ==============
+def call_summary_stream(text, mode, model, language):
+    """
+    流式调用摘要生成API
+    由于Gradio不支持原生SSE，使用轮询方式模拟流式效果
+    """
+    import threading
+    import queue
+    
+    result_queue = queue.Queue()
+    done_event = threading.Event()
+    
+    one_liner_text = ""
+    detailed_text = ""
+    mermaid_text = ""
+    
+    def stream_worker():
+        try:
+            with requests.post(
+                f"{BACKEND}/api/paper/summary/stream",
+                json={"text": text, "mode": mode, "model": model, "language": language},
+                stream=True,
+                timeout=60
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            import json
+                            try:
+                                data = json.loads(line[6:])
+                                if data.get('type') == 'content':
+                                    section = data.get('section', '')
+                                    content = data.get('content', '')
+                                    if section == 'one_liner':
+                                        nonlocal one_liner_text
+                                        one_liner_text += content
+                                    elif section == 'detailed':
+                                        nonlocal detailed_text
+                                        detailed_text += content
+                                    # 放入队列更新UI
+                                    result_queue.put((one_liner_text, detailed_text, mermaid_text))
+                                elif data.get('type') == 'done':
+                                    done_event.set()
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            result_queue.put((f"Error: {str(e)}", "", ""))
+            done_event.set()
+    
+    # 启动流式线程
+    thread = threading.Thread(target=stream_worker)
+    thread.start()
+    
+    # 等待一小段时间让初始响应回来
+    time.sleep(0.5)
+    
+    # 返回初始空值，后续通过轮询更新
+    return "", "等待生成中...", ""
+
+
+def call_transfer_stream(text, journal, formality, domain, model):
+    """
+    流式调用润色改写API
+    """
+    import threading
+    import queue
+    
+    result_queue = queue.Queue()
+    
+    rewritten_text = ""
+    suggestions_text = ""
+    
+    def stream_worker():
+        try:
+            with requests.post(
+                f"{BACKEND}/api/write/transfer/stream",
+                json={"text": text, "target_journal": journal, "formality": formality, "domain": domain, "model": model},
+                stream=True,
+                timeout=60
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            import json
+                            try:
+                                data = json.loads(line[6:])
+                                if data.get('type') == 'content':
+                                    section = data.get('section', '')
+                                    content = data.get('content', '')
+                                    if section == 'rewritten':
+                                        nonlocal rewritten_text
+                                        rewritten_text += content
+                                    elif section == 'suggestions':
+                                        nonlocal suggestions_text
+                                        suggestions_text += content
+                                    result_queue.put((rewritten_text, suggestions_text))
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            result_queue.put((f"Error: {str(e)}", ""))
+    
+    # 启动流式线程
+    thread = threading.Thread(target=stream_worker)
+    thread.start()
+    
+    # 等待一小段时间
+    time.sleep(0.5)
+    
+    return "", ""
+
+
+# 存储流式结果的全局状态
+stream_results = {
+    "summary": {"one_liner": "", "detailed": "", "mermaid": ""},
+    "transfer": {"rewritten": "", "suggestions": ""}
+}
+
+
+def poll_summary_stream(text, mode, model, language):
+    """轮询获取流式摘要结果"""
+    import threading
+    
+    if not text:
+        return "", "请先解析PDF文件", ""
+    
+    def stream_worker():
+        try:
+            with requests.post(
+                f"{BACKEND}/api/paper/summary/stream",
+                json={"text": text, "mode": mode, "model": model, "language": language},
+                stream=True,
+                timeout=120
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            import json
+                            try:
+                                data = json.loads(line[6:])
+                                if data.get('type') == 'content':
+                                    section = data.get('section', '')
+                                    content = data.get('content', '')
+                                    if section == 'one_liner':
+                                        stream_results["summary"]["one_liner"] += content
+                                    elif section == 'detailed':
+                                        stream_results["summary"]["detailed"] += content
+                                    elif section == 'mermaid':
+                                        stream_results["summary"]["mermaid"] += content
+                                elif data.get('type') == 'done':
+                                    break
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            stream_results["summary"]["detailed"] = f"Error: {str(e)}"
+    
+    thread = threading.Thread(target=stream_worker)
+    thread.start()
+    
+    return stream_results["summary"]["one_liner"], stream_results["summary"]["detailed"], stream_results["summary"]["mermaid"]
+
+
+def poll_transfer_stream(text, journal, formality, domain, model):
+    """轮询获取流式润色结果"""
+    import threading
+    
+    if not text:
+        return "", "请先输入要润色的文本"
+    
+    def stream_worker():
+        try:
+            with requests.post(
+                f"{BACKEND}/api/write/transfer/stream",
+                json={"text": text, "target_journal": journal, "formality": formality, "domain": domain, "model": model},
+                stream=True,
+                timeout=120
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            import json
+                            try:
+                                data = json.loads(line[6:])
+                                if data.get('type') == 'content':
+                                    section = data.get('section', '')
+                                    content = data.get('content', '')
+                                    if section == 'rewritten':
+                                        stream_results["transfer"]["rewritten"] += content
+                                    elif section == 'suggestions':
+                                        stream_results["transfer"]["suggestions"] += content
+                                elif data.get('type') == 'done':
+                                    break
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            stream_results["transfer"]["rewritten"] = f"Error: {str(e)}"
+    
+    thread = threading.Thread(target=stream_worker)
+    thread.start()
+    
+    return stream_results["transfer"]["rewritten"], stream_results["transfer"]["suggestions"]
+
 def get_models():
-    """Fetch available models from backend"""
-    default_models = [("MVP Default (Mock)", "mvp-default")]
-    try:
-        r = requests.get(f"{BACKEND}/api/models", timeout=3)
-        if r.status_code == 200:
-            data = r.json().get("data", [])
-            if data:
-                return [(m["name"] if "name" in m else m["id"], m["id"]) for m in data]
-    except Exception as e:
-        print(f"Failed to fetch models: {e}")
-    return default_models
+    """Fetch available models from backend with retry logic"""
+    # 默认模型列表（作为fallback）
+    default_models = [
+        ("qwen2.5-7b-instruct (Default)", "qwen2.5-7b-instruct"),
+        ("qwen2.5-14b-instruct", "qwen2.5-14b-instruct"),
+        ("qwen2.5-72b-instruct", "qwen2.5-72b-instruct"),
+        ("deepseek-r1", "deepseek-r1"),
+        ("deepseek-v3", "deepseek-v3"),
+    ]
+    
+    # 添加重试逻辑，等待后端就绪
+    max_retries = 5
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(f"{BACKEND}/api/models", timeout=3)
+            if r.status_code == 200:
+                data = r.json().get("data", [])
+                if data:
+                    # 将后端返回的模型转换为 (name, id) 元组列表
+                    model_choices = [(m.get("name", m.get("id")), m.get("id")) for m in data]
+                    # 如果列表不为空，使用第一个模型作为默认值
+                    if model_choices:
+                        # 返回 gr.update 对象，同时设置 choices 和 value
+                        return gr.update(choices=model_choices, value=model_choices[0][1])
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                print(f"Backend not ready (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                print(f"Failed to fetch models after {max_retries} attempts: {e}")
+        except Exception as e:
+            print(f"Unexpected error fetching models: {e}")
+            break
+    
+    # 返回默认模型列表和第一个作为默认值
+    return gr.update(choices=default_models, value=default_models[0][1])
 
 # 自定义CSS
 custom_css = """
@@ -78,9 +316,14 @@ body {
 /* 标题区域 */
 .header-container {
     text-align: left;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--border-color-primary);
+    align-items: center !important;
+}
+.header-container > .row {
+    gap: 0.5rem !important;
+    align-items: center !important;
 }
 .logo-text {
     font-family: 'JetBrains Mono', monospace;
@@ -147,8 +390,78 @@ textarea, input {
     border-radius: 8px !important;
 }
 
+/* 主题按钮样式 - 基础样式 */
+#theme-toggle {
+    font-size: 1.2rem !important;
+    padding: 8px 12px !important;
+    min-width: 44px !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+/* 浅色模式下：深色背景 + 月亮图标 */
+#theme-toggle {
+    background: #171717 !important;
+    border: 1px solid #171717 !important;
+}
+
+/* 深色模式下：白色背景 + 太阳图标 */
+.dark #theme-toggle {
+    background: #ffffff !important;
+    border: 1px solid #ffffff !important;
+}
+
+/* 统一设置区域按钮样式 */
+.header-settings .gradio-dropdown,
+.header-settings .gradio-radio,
+.header-settings .gradio-button {
+    border-radius: 8px !important;
+    border: 1px solid var(--border-color-primary) !important;
+    background: var(--background-fill-secondary) !important;
+}
+
+.header-settings .gradio-radio {
+    padding: 4px 8px !important;
+    gap: 4px !important;
+}
+
+.header-settings .gradio-dropdown button {
+    border-radius: 8px !important;
+}
+
+.header-settings .gradio-radio button {
+    border-radius: 6px !important;
+    font-size: 0.85rem !important;
+    padding: 4px 8px !important;
+}
+
 /* 隐藏footer */
 footer { display: none !important; }
+
+/* 简单响应式适配 - 平板 */
+@media (max-width: 1024px) {
+    .header-container .row {
+        flex-wrap: wrap !important;
+    }
+}
+
+/* 简单响应式适配 - 小屏幕手机 */
+@media (max-width: 768px) {
+    .gradio-container {
+        max-width: 100% !important;
+        padding: 0.5rem !important;
+    }
+    .header-container {
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+    .header-container .column {
+        width: 100% !important;
+    }
+    .panel-container {
+        padding: 1rem !important;
+    }
+}
 """
 
 # 黑白极简主题配置
@@ -277,8 +590,17 @@ js_func = """
 """
 
 def toggle_theme():
-    """切换深色模式的 JS"""
-    return "() => { document.body.classList.toggle('dark'); }"
+    """切换深色模式的 JS，同时切换图标"""
+    return """() => {
+        const body = document.body;
+        const btn = document.getElementById('theme-toggle');
+        body.classList.toggle('dark');
+        if (body.classList.contains('dark')) {
+            btn.innerHTML = '☀️';
+        } else {
+            btn.innerHTML = '🌙';
+        }
+    }"""
 
 with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
     # 状态变量
@@ -295,14 +617,11 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                     </div>
                 </div>
             """)
-        with gr.Column(scale=2, min_width=300):
-            with gr.Row():
-                # 模型选择下拉框
-                model_select = gr.Dropdown(choices=[], value="mvp-default", label="Model / 模型", interactive=True, scale=3)
-                # 语言切换按钮
-                lang_btn = gr.Radio(choices=[("English", "en"), ("中文", "zh")], value="en", label="Language / 语言", interactive=True, scale=2)
-                # 深色模式按钮
-                dark_btn = gr.Button("🌓 Theme", variant="secondary", scale=1)
+        with gr.Column(scale=2):
+            with gr.Row(equal_height=True, variant="compact", elem_classes="header-settings"):
+                model_select = gr.Dropdown(choices=[], label="Model", interactive=True, scale=3, min_width=150)
+                lang_btn = gr.Radio(choices=[("EN", "en"), ("中文", "zh")], value="en", label="Lang", interactive=True, scale=2, min_width=100, container=False)
+                dark_btn = gr.Button("🌙", variant="secondary", scale=1, min_width=40, elem_id="theme-toggle")
                 
     # 绑定深色模式切换事件
     dark_btn.click(None, None, None, js=toggle_theme())
@@ -375,7 +694,16 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                             with gr.Accordion("JSON Structure", open=False) as acc2:
                                 raw_json_output = gr.JSON(label="Structured Data")
 
-            # 绑定事件
+            # 绑定事件 - 上传文件自动解析
+            pdf_input.change(
+                call_parse,
+                inputs=[pdf_input],
+                outputs=[parsed_text_hidden, raw_json_output]
+            ).then(
+                lambda x: x, inputs=[parsed_text_hidden], outputs=[parsed_text_display]
+            )
+
+            # 保留手动解析按钮作为备用
             parse_btn.click(
                 call_parse,
                 inputs=[pdf_input],
@@ -385,9 +713,32 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             )
 
             summary_btn.click(
-                call_summary,
-                inputs=[parsed_text_hidden, mode_select, model_select],
+                # 启动流式请求
+                poll_summary_stream,
+                inputs=[parsed_text_hidden, mode_select, model_select, lang_state],
                 outputs=[one_liner_output, detailed_output, mermaid_output]
+            ).then(
+                # 初始化状态
+                lambda: ("", "等待生成中...", ""),
+                outputs=[one_liner_output, detailed_output, mermaid_output]
+            )
+
+            # 添加轮询更新组件
+            summary_poller = gr.Number(visible=False, value=0)
+
+            # 使用定时轮询更新流式结果
+            def get_summary_stream_results(text, mode, model, language):
+                return (
+                    stream_results["summary"]["one_liner"],
+                    stream_results["summary"]["detailed"],
+                    stream_results["summary"]["mermaid"]
+                )
+
+            summary_poller.change(
+                get_summary_stream_results,
+                inputs=[parsed_text_hidden, mode_select, model_select, lang_state],
+                outputs=[one_liner_output, detailed_output, mermaid_output],
+                every=0.5  # 每0.5秒轮询一次
             )
 
         # ==================== Tab 2: 学术写作助手 ====================
@@ -456,9 +807,31 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             )
             
             transfer_btn.click(
-                call_transfer,
+                # 启动流式请求
+                poll_transfer_stream,
                 inputs=[text_input, journal_select, formality_slider, domain_select, model_select],
                 outputs=[rewritten_output, suggestions_output]
+            ).then(
+                # 初始化状态
+                lambda: ("", "等待生成中..."),
+                outputs=[rewritten_output, suggestions_output]
+            )
+
+            # 添加轮询更新组件
+            transfer_poller = gr.Number(visible=False, value=0)
+
+            # 使用定时轮询更新流式结果
+            def get_transfer_stream_results(text, journal, formality, domain, model):
+                return (
+                    stream_results["transfer"]["rewritten"],
+                    stream_results["transfer"]["suggestions"]
+                )
+
+            transfer_poller.change(
+                get_transfer_stream_results,
+                inputs=[text_input, journal_select, formality_slider, domain_select, model_select],
+                outputs=[rewritten_output, suggestions_output],
+                every=0.5  # 每0.5秒轮询一次
             )
 
     # 语言切换事件处理
@@ -504,6 +877,8 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             gr.update(label=t["diag_report"]),
             gr.update(label=t["lexical"]),
             gr.update(label=t["structural"]),
+            # 返回新的语言值
+            lang,
         )
 
     lang_btn.change(
@@ -516,7 +891,8 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             t1_sub3, acc1, parsed_text_display, acc2, raw_json_output,
             md_draft, text_input, md_params, domain_select, journal_select, formality_slider,
             analyze_btn, transfer_btn, md_enhance, t2_sub1, rewritten_output, suggestions_output,
-            t2_sub2, diagnostics_output, lexical_json, structural_json
+            t2_sub2, diagnostics_output, lexical_json, structural_json,
+            lang_state
         ]
     )
 

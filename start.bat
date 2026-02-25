@@ -47,27 +47,29 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: 4. Start Backend
+:: 4. Start Backend (in same terminal, background)
 echo.
 echo [4/5] Starting Backend Server...
 set PYTHONPATH=%cd%
 set BACKEND_URL=http://127.0.0.1:8000
 
-:: Create a temporary backend starter script to avoid quoting issues
-echo @echo off > start_backend.bat
-echo title ResearchPal Backend >> start_backend.bat
-echo call .venv_win\Scripts\activate.bat >> start_backend.bat
-echo set PYTHONPATH=%cd% >> start_backend.bat
-echo python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload >> start_backend.bat
-echo if %%errorlevel%% neq 0 pause >> start_backend.bat
-
-start "ResearchPal Backend" start_backend.bat
+:: Run backend in background within same terminal
+start "" /b python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 
 :: 5. Start Frontend
 echo.
 echo [5/5] Waiting for backend and starting Frontend...
-echo Waiting 10 seconds...
-timeout /t 10 /nobreak >nul
+echo Checking backend health...
+
+:: Polling wait - check backend health instead of fixed wait
+:wait_for_backend
+curl -s http://127.0.0.1:8000/health >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   Backend not ready, retrying in 2 seconds...
+    timeout /t 2 /nobreak >nul
+    goto wait_for_backend
+)
+echo   Backend is ready!
 
 echo Starting Frontend...
 python frontend/gradio_app.py
