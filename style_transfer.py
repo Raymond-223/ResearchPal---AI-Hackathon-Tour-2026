@@ -182,19 +182,21 @@ class StyleTransfer:
             self.use_modelscope = False
     
     def transfer(
-        self, 
-        text: str, 
+        self,
+        text: str,
         target_style: JournalStyle = JournalStyle.GENERAL_ACADEMIC,
+        formality: float = 0.85,
         max_length: int = 2048
     ) -> TransferResult:
         """
         执行风格迁移
-        
+
         Args:
             text: 输入文本
             target_style: 目标期刊风格
+            formality: 正式程度 (0-1)，0为口语化，1为极正式
             max_length: 最大生成长度
-            
+
         Returns:
             TransferResult: 迁移结果
         """
@@ -213,10 +215,10 @@ class StyleTransfer:
         )
         
         if self.use_modelscope and self._model and self._tokenizer:
-            transferred = self._transfer_with_model(text, style_info, max_length)
+            transferred = self._transfer_with_model(text, style_info, formality, max_length)
         else:
             # 使用规则替换作为备选方案
-            transferred = self._transfer_with_rules(text, target_style)
+            transferred = self._transfer_with_rules(text, target_style, formality)
         
         # 分析改动
         changes = self._analyze_changes(text, transferred)
@@ -232,14 +234,19 @@ class StyleTransfer:
             confidence=confidence
         )
     
-    def _transfer_with_model(self, text: str, style_info: Dict, max_length: int) -> str:
+    def _transfer_with_model(self, text: str, style_info: Dict, formality: float, max_length: int) -> str:
         """使用Qwen模型进行风格迁移"""
-        prompt = style_info["prompt_template"].format(text=text)
-        
+        # 根据 formality 生成正式程度描述
+        formality_description = self._get_formality_description(formality)
+
+        # 构建完整的 prompt，包含期刊风格和正式程度要求
+        base_template = style_info["prompt_template"]
+        prompt = f"{base_template}\n\n【正式程度要求】：{formality_description}"
+
         try:
             response, _ = self._model.chat(
                 self._tokenizer,
-                prompt,
+                prompt.format(text=text),
                 history=None,
                 max_length=max_length,
                 temperature=0.7,
@@ -249,37 +256,71 @@ class StyleTransfer:
         except Exception as e:
             print(f"模型推理失败: {e}")
             return text
+
+    def _get_formality_description(self, formality: float) -> str:
+        """根据 formality 值生成详细的风格描述"""
+        if formality >= 0.9:
+            return "极其正式，使用最规范的学术语言，避免任何口语化表达，使用复杂的从句结构，极少量的缩约词"
+        elif formality >= 0.7:
+            return "高度正式，使用规范的学术语言，避免口语化表达，使用适当的从句结构，少量使用被动语态"
+        elif formality >= 0.5:
+            return "中等正式，保持学术专业性，适度使用复杂句式，平衡使用主动和被动语态"
+        elif formality >= 0.3:
+            return "较为口语化，使用较为通俗的学术表达，可使用较短的句式，允许一定的口语化词汇"
+        else:
+            return "口语化，使用通俗易懂的表达，以简单句为主，可以使用日常用语和缩约词"
     
-    def _transfer_with_rules(self, text: str, style: JournalStyle) -> str:
+    def _transfer_with_rules(self, text: str, style: JournalStyle, formality: float = 0.85) -> str:
         """使用规则进行基础风格转换（备选方案）"""
         result = text
-        
-        # 通用学术化替换规则
-        replacements = {
-            # 中文口语 -> 学术
+
+        # 根据正式程度决定应用的替换规则强度
+        # formality >= 0.7: 全部规则
+        # formality >= 0.5: 部分规则
+        # formality < 0.5: 少量规则（保持一定口语化）
+
+        # 核心学术化替换规则（高正式程度必需）
+        core_replacements = {
+            # 中文
+            "所以": "因此",
+            "但是": "然而",
+            "而且": "此外",
+            # 英文
+            "a lot of": "numerous",
+            "lots of": "many",
+            "show": "demonstrate",
+        }
+
+        # 扩展学术化替换规则（最高正式程度使用）
+        extended_replacements = {
+            # 中文
             "很": "显著",
             "非常": "极其",
             "好的": "良好的",
             "坏的": "不良的",
-            "所以": "因此",
-            "但是": "然而",
-            "而且": "此外",
-            # 英文口语 -> 学术
-            "a lot of": "numerous",
-            "lots of": "many",
+            # 英文
             "big": "significant",
             "small": "minor",
             "good": "favorable",
             "bad": "unfavorable",
             "get": "obtain",
-            "show": "demonstrate",
+            "use": "utilize",
+            "like": "such as",
         }
-        
-        for old, new in replacements.items():
+
+        # 应用核心规则（始终应用）
+        for old, new in core_replacements.items():
             if old in result.lower():
                 pattern = re.compile(re.escape(old), re.IGNORECASE)
                 result = pattern.sub(new, result)
-        
+
+        # 根据正式程度应用扩展规则
+        if formality >= 0.5:
+            for old, new in extended_replacements.items():
+                if old in result.lower():
+                    pattern = re.compile(re.escape(old), re.IGNORECASE)
+                    result = pattern.sub(new, result)
+
         return result
     
     def _analyze_changes(self, original: str, transferred: str) -> List[str]:
@@ -381,10 +422,10 @@ class StyleTransfer:
         }
         
         target_style = journal_mapping.get(target_journal, JournalStyle.GENERAL_ACADEMIC)
-        
+
         # 执行迁移（考虑formality参数）
-        result = self.transfer(text, target_style)
-        
+        result = self.transfer(text, target_style, formality=formality)
+
         # 根据formality调整置信度
         adjusted_confidence = min(1.0, result.confidence * (0.5 + formality * 0.5))
         

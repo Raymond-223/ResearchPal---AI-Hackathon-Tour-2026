@@ -25,6 +25,22 @@ from summary_generator import generate_short_summary, generate_long_summary
 router = APIRouter()
 
 
+def _get_formality_description(formality: float) -> str:
+    """根据 formality 值生成详细的风格描述"""
+    if formality >= 0.9:
+        return "极其正式 - 使用最规范的学术语言，避免任何口语化表达，使用复杂的从句结构，极少量使用缩约词"
+    elif formality >= 0.7:
+        return "高度正式 - 使用规范的学术语言，避免口语化表达，使用适当的从句结构，少量使用被动语态"
+    elif formality >= 0.5:
+        return "中等正式 - 保持学术专业性，适度使用复杂句式，平衡使用主动和被动语态"
+    elif formality >= 0.3:
+        return "口语化 - 使用通俗易懂的表达，以简单句为主，可以使用日常用语和缩约词"
+    elif formality >= 0.1:
+        return "很口语化 - 使用不正经的表达，使用各种日常用语，并引用网络梗和俚语，展现幽默感"
+    else:
+        return "极其口语化 - 使用极不正经的表达，并引用尽可能多的网络梗和俚语，极尽幽默感，想方设法逗乐读者"
+
+
 @router.get("/models", response_model=ModelListResponse)
 async def list_models():
     models = get_available_models()
@@ -315,9 +331,20 @@ async def generate_transfer_stream(text: str, target_journal: str, formality: fl
     
     if model and model != "mvp-default" and not model.startswith("error"):
         try:
+            # 生成详细的正式程度描述
+            formality_desc = _get_formality_description(formality)
             messages_rewrite = [
                 {"role": "system", "content": "You are an expert academic editor."},
-                {"role": "user", "content": f"Rewrite the following text for {target_journal} style (Formality: {formality}, Domain: {domain}):\n\n{text}"}
+                {"role": "user", "content": f"""Rewrite the following academic text for {target_journal} style.
+
+【Target Style】: {target_journal}
+【Domain】: {domain}
+【Formality Level】: {formality_desc}
+
+Original Text:
+{text}
+
+Please rewrite the text above to match the target journal style while maintaining the formality level specified. Keep the original meaning intact."""}
             ]
             for chunk in call_genstudio_chat_stream(messages_rewrite, model):
                 yield f"data: {json.dumps({'type': 'content', 'section': 'rewritten', 'content': chunk})}\n\n"
@@ -346,9 +373,15 @@ async def generate_transfer_stream(text: str, target_journal: str, formality: fl
     
     if model and model != "mvp-default" and not model.startswith("error"):
         try:
+            formality_desc = _get_formality_description(formality)
             messages_suggest = [
                 {"role": "system", "content": "You are an expert academic editor."},
-                {"role": "user", "content": f"Provide 3 brief suggestions to improve the following text for {target_journal}:\n\n{text}"}
+                {"role": "user", "content": f"""Provide 3 brief suggestions to improve the following text for {target_journal} style with formality level: {formality_desc}
+
+Original Text:
+{text}
+
+Provide your suggestions in a concise format."""}
             ]
             for chunk in call_genstudio_chat_stream(messages_suggest, model):
                 yield f"data: {json.dumps({'type': 'content', 'section': 'suggestions', 'content': chunk})}\n\n"
