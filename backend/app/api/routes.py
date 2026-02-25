@@ -134,6 +134,24 @@ async def generate_summary_stream(text: str, mode: str, model: str, language: st
 5. **局限性与未来工作**（1-2句）：论文的局限性是什么？有哪些未来方向？
 
 论文文本："""
+
+        # 针对 fast 模式的简短详细摘要 prompt
+        detailed_prompt_fast = """请提供这篇学术论文的简要结构化摘要（150-200字），涵盖：
+
+1. **核心贡献**：论文提出了什么新方法/技术？
+2. **主要结果**：取得了什么关键成果？
+3. **创新点**：与现有方法相比的主要优势是什么？
+
+论文文本："""
+
+        # 针对 fast 模式的英文简短 prompt
+        detailed_prompt_fast_en = """Provide a brief structured summary of this academic paper (150-200 words) covering:
+
+1. Core Contribution: What new method/technique does the paper propose?
+2. Main Results: What key achievements were obtained?
+3. Innovation: What are the main advantages compared to existing methods?
+
+Paper text: """
     else:
         system_prompt = """You are a world-class academic paper analyst. Your expertise spans computer science, mathematics, physics, biology, medicine, and engineering. You excel at:
 1. Distilling complex research into clear, concise summaries
@@ -165,6 +183,24 @@ Paper text: """
 
 Paper text: """
 
+        # 针对 fast 模式的简短详细摘要 prompt (英文)
+        detailed_prompt_fast_en = """Provide a brief structured summary of this academic paper (150-200 words) covering:
+
+1. Core Contribution: What new method/technique does the paper propose?
+2. Main Results: What key achievements were obtained?
+3. Innovation: What are the main advantages compared to existing methods?
+
+Paper text: """
+
+    # 根据 mode 参数选择使用哪个 detailed prompt
+    if mode == "fast":
+        # fast 模式使用简短版
+        if language == "zh":
+            detailed_prompt = detailed_prompt_fast
+        else:
+            detailed_prompt = detailed_prompt_fast_en
+    # mvp 和 deep 模式使用完整版 detailed_prompt（已在上面定义）
+
     # 智能截断文本
     truncated_text = _smart_truncate_stream(text)
     request_id = str(uuid.uuid4())
@@ -192,7 +228,12 @@ Paper text: """
         for char in (prefix + one_liner):
             yield f"data: {json.dumps({'type': 'content', 'section': 'one_liner', 'content': char})}\n\n"
 
-    # Detailed 流式输出
+    # MVP 模式：只输出 one_liner，跳过 detailed 和 mermaid
+    if mode == "mvp":
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
+
+    # Detailed 流式输出（fast 和 deep 模式）
     yield f"data: {json.dumps({'type': 'section', 'name': 'detailed'})}\n\n"
     messages_detail = [
         {"role": "system", "content": system_prompt},
@@ -212,6 +253,47 @@ Paper text: """
         prefix = "【10分钟精读】" if language == "zh" else ""
         for char in (prefix + detailed):
             yield f"data: {json.dumps({'type': 'content', 'section': 'detailed', 'content': char})}\n\n"
+
+    # 只有 deep 模式才生成 mermaid 图
+    if mode == "deep":
+        # 添加 mermaid prompt（与 paper_service.py 保持一致）
+        if language == "zh":
+            mermaid_prompt = """根据这篇论文，生成一个Mermaid流程图来展示论文的方法论或框架。
+
+要求：
+- 使用清晰的节点标签描述每个步骤/组件
+- 展示从输入到输出的流程
+- 包含关键的技术组件作为节点
+- 保持简洁但信息丰富
+
+论文文本："""
+        else:
+            mermaid_prompt = """Based on this paper, generate a Mermaid flowchart showing the paper's methodology or framework.
+
+Requirements:
+- Use clear node labels describing each step/component
+- Show the flow from input to output
+- Include key technical components as nodes
+- Keep it simple but informative
+
+Paper text: """
+
+        yield f"data: {json.dumps({'type': 'section', 'name': 'mermaid'})}\n\n"
+        messages_mermaid = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": mermaid_prompt + truncated_text}
+        ]
+        if model and model != "mvp-default" and not model.startswith("error"):
+            try:
+                for chunk in call_genstudio_chat_stream(messages_mermaid, model):
+                    yield f"data: {json.dumps({'type': 'content', 'section': 'mermaid', 'content': chunk})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'content', 'section': 'mermaid', 'content': f'[Error: {str(e)}]'})}\n\n"
+        else:
+            # Fallback: 本地 mock
+            mermaid_placeholder = "```mermaid\nflowchart TD\n    A[Input] --> B[Processing]\n    B --> C[Output]\n```"
+            for char in mermaid_placeholder:
+                yield f"data: {json.dumps({'type': 'content', 'section': 'mermaid', 'content': char})}\n\n"
 
     # 完成
     yield f"data: {json.dumps({'type': 'done'})}\n\n"

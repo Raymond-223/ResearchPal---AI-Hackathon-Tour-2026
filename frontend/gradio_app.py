@@ -41,6 +41,193 @@ def call_profile(text, domain):
     d = r.json()
     return d["lexical"], d["structural"], "\n".join(d["diagnostics"])
 
+
+def call_profile_formatted(text, domain, lang="en"):
+    """包装call_profile，返回格式化后的卡片式UI"""
+    r = requests.post(f"{BACKEND}/api/write/profile", json={"text": text, "domain": domain})
+    r.raise_for_status()
+    d = r.json()
+
+    lexical = d["lexical"]
+    structural = d["structural"]
+    diagnostics = d["diagnostics"]
+
+    # 格式化lexical和structural为卡片式展示
+    lexical_formatted = format_lexical_metrics(lexical, lang)
+    structural_formatted = format_structural_metrics(structural, lang)
+
+    # 合并所有卡片
+    combined = lexical_formatted + "\n\n" + structural_formatted
+
+    # 诊断建议
+    diagnostics_html = ""
+    if diagnostics:
+        diag_title = "### Suggestions" if lang == "en" else "### 改进建议"
+        diag_items = "\n".join([f"- {d}" for d in diagnostics])
+        diagnostics_html = f"\n\n{diag_title}\n\n{diag_items}"
+
+    return lexical, structural, combined + diagnostics_html
+
+
+def format_lexical_metrics(lexical_data, lang="en"):
+    """解析lexical指标，生成卡片式Markdown展示"""
+    # 指标名称映射
+    names = {
+        "en": {
+            "formality_score": "Formality Score",
+            "sentence_complexity": "Sentence Complexity",
+            "domain_terms": "Domain Terms"
+        },
+        "zh": {
+            "formality_score": "正式程度",
+            "sentence_complexity": "句子复杂度",
+            "domain_terms": "领域术语"
+        }
+    }
+    t = names.get(lang, names["en"])
+
+    # 获取各指标值
+    formality = lexical_data.get("formality_score", 0)
+    complexity = lexical_data.get("sentence_complexity", 0)
+    domain_terms = lexical_data.get("domain_terms", [])
+
+    # 生成进度条
+    def progress_bar(value, length=10):
+        filled = int(value * length)
+        return "█" * filled + "░" * (length - filled)
+
+    # 生成卡片
+    cards = []
+
+    # 正式程度卡片
+    formality_level = "Casual" if formality < 0.4 else "Balanced" if formality < 0.7 else "Formal"
+    formality_level_zh = "较为口语化" if formality < 0.4 else "较为平衡" if formality < 0.7 else "正式"
+    level_text = formality_level_zh if lang == "zh" else formality_level
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">📝</span>
+        <span class="metric-name">{t['formality_score']}</span>
+    </div>
+    <div class="metric-value">{progress_bar(formality)} {int(formality * 100)}%</div>
+    <div class="metric-desc">{level_text}</div>
+</div>
+""")
+
+    # 句子复杂度卡片
+    complexity_level = "Simple" if complexity < 0.4 else "Moderate" if complexity < 0.7 else "Complex"
+    complexity_level_zh = "简单句较多" if complexity < 0.4 else "中等复杂度" if complexity < 0.7 else "复杂句式多"
+    level_text = complexity_level_zh if lang == "zh" else complexity_level
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">🔤</span>
+        <span class="metric-name">{t['sentence_complexity']}</span>
+    </div>
+    <div class="metric-value">{progress_bar(complexity)} {int(complexity * 100)}%</div>
+    <div class="metric-desc">{level_text}</div>
+</div>
+""")
+
+    # 领域术语卡片
+    terms_display = ", ".join(domain_terms[:5]) if domain_terms else "N/A"
+    terms_display_zh = "无检测到领域术语" if not domain_terms else ", ".join(domain_terms[:5])
+    display_text = terms_display_zh if lang == "zh" else terms_display
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">🧠</span>
+        <span class="metric-name">{t['domain_terms']}</span>
+    </div>
+    <div class="metric-value-full">{display_text}</div>
+</div>
+""")
+
+    # 返回标题和卡片容器
+    title = "### Lexical Analysis" if lang == "en" else "### 词汇分析"
+    return title + "\n\n" + "\n".join(cards)
+
+
+def format_structural_metrics(structural_data, lang="en"):
+    """解析structural指标，生成卡片式Markdown展示"""
+    # 指标名称映射
+    names = {
+        "en": {
+            "passive_ratio": "Passive Voice Ratio",
+            "transition_words": "Transition Words",
+            "paragraph_structure": "Paragraph Structure"
+        },
+        "zh": {
+            "passive_ratio": "被动语态比例",
+            "transition_words": "过渡词使用",
+            "paragraph_structure": "段落结构"
+        }
+    }
+    t = names.get(lang, names["en"])
+
+    # 获取各指标值
+    passive = structural_data.get("passive_ratio", 0)
+    transitions = structural_data.get("transition_words", 0)
+    structure = structural_data.get("paragraph_structure", "N/A")
+
+    # 生成进度条
+    def progress_bar(value, length=10):
+        filled = int(value * length)
+        return "█" * filled + "░" * (length - filled)
+
+    cards = []
+
+    # 被动语态比例卡片
+    passive_level = "Low" if passive < 0.3 else "Moderate" if passive < 0.6 else "High"
+    passive_level_zh = "较低" if passive < 0.3 else "适中" if passive < 0.6 else "较高"
+    level_text = passive_level_zh if lang == "zh" else passive_level
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">📊</span>
+        <span class="metric-name">{t['passive_ratio']}</span>
+    </div>
+    <div class="metric-value">{progress_bar(passive)} {int(passive * 100)}%</div>
+    <div class="metric-desc">{level_text}</div>
+</div>
+""")
+
+    # 过渡词卡片
+    transition_level = "Few" if transitions < 1 else "Adequate" if transitions < 3 else "Good"
+    transition_level_zh = "较少" if transitions < 1 else "适中" if transitions < 3 else "丰富"
+    level_text = transition_level_zh if lang == "zh" else transition_level
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">🔄</span>
+        <span class="metric-name">{t['transition_words']}</span>
+    </div>
+    <div class="metric-value">{transitions} {level_text}</div>
+</div>
+""")
+
+    # 段落结构卡片
+    structure_zh = {
+        "IMRaD": "标准学术结构 (IMRaD)",
+        "Abstract": "摘要式结构",
+        "List": "清单式结构",
+        "N/A": "未检测到"
+    }
+    structure_display = structure_zh.get(structure, structure) if lang == "zh" else structure
+    cards.append(f"""
+<div class="metric-card">
+    <div class="metric-header">
+        <span class="metric-icon">📋</span>
+        <span class="metric-name">{t['paragraph_structure']}</span>
+    </div>
+    <div class="metric-value-full">{structure_display}</div>
+</div>
+""")
+
+    # 返回标题和卡片容器
+    title = "### Structural Analysis" if lang == "en" else "### 结构分析"
+    return title + "\n\n" + "\n".join(cards)
+
 def call_transfer(text, journal, formality, domain, model):
     r = requests.post(
         f"{BACKEND}/api/write/transfer",
@@ -196,24 +383,43 @@ body {
 .gradio-container {
     max-width: 1400px !important;
     margin: 0 auto;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }
 
-/* 标题区域 */
+/* 标题区域 - 紧凑型导航栏 */
 .header-container {
     text-align: left;
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
+    margin-bottom: 0 !important;
+    margin-top: 0;
+    padding-bottom: 8px;
+    padding-top: 8px;
     border-bottom: 1px solid var(--border-color-primary);
     align-items: center !important;
+    min-height: 50px !important;
+    gap: 0 !important;
+}
+
+/* 消除 header 和 tabs 之间的空白 */
+.header-container + .gr-tabs {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Tabs 容器顶部无间距 */
+.tabs {
+    margin-top: 0 !important;
 }
 .header-container > .row {
     gap: 0.5rem !important;
     align-items: center !important;
+    flex-wrap: nowrap !important;
+    overflow: visible !important;
 }
 .logo-text {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 700;
-    font-size: 2rem;
+    font-size: 1.2rem !important;
     letter-spacing: -1px;
     /* 浅色模式下：使用深色文字 */
     color: #171717;
@@ -221,6 +427,9 @@ body {
 .dark .logo-text {
     /* 深色模式下：使用浅色文字 */
     color: #f5f5f5;
+}
+#subtitle {
+    font-size: 0.7rem !important;
 }
 
 /* Tab 样式 */
@@ -246,7 +455,7 @@ button.selected {
 .panel-container {
     border: 1px solid var(--border-color-primary);
     border-radius: 16px;
-    padding: 1.5rem;
+    padding: 0.75rem;
     background: var(--background-fill-primary);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }
@@ -277,9 +486,10 @@ textarea, input {
 
 /* 主题按钮样式 - 基础样式 */
 #theme-toggle {
-    font-size: 1.2rem !important;
-    padding: 8px 12px !important;
-    min-width: 44px !important;
+    padding: 4px 10px !important;
+    min-width: 50px !important;
+    height: 64px !important;
+    min-height: 64px !important;
     border-radius: 8px !important;
     transition: all 0.2s ease !important;
 }
@@ -303,6 +513,17 @@ textarea, input {
     border-radius: 8px !important;
     border: 1px solid var(--border-color-primary) !important;
     background: var(--background-fill-secondary) !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.header-settings .gradio-dropdown > div,
+.header-settings .gradio-dropdown .wrap,
+.header-settings .gradio-dropdown form {
+    height: 30px !important;
+    min-height: 30px !important;
 }
 
 .header-settings .gradio-radio {
@@ -312,6 +533,35 @@ textarea, input {
 
 .header-settings .gradio-dropdown button {
     border-radius: 8px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 2px 8px !important;
+}
+
+/* Model下拉框更精确的高度控制 */
+.header-settings .gradio-dropdown {
+    height: 28px !important;
+}
+.header-settings .gradio-dropdown button.trigger,
+.header-settings .gradio-dropdown .secondary {
+    height: 28px !important;
+    min-height: 28px !important;
+    line-height: 20px !important;
+}
+.header-settings .gradio-dropdown input,
+.header-settings .gradio-dropdown span {
+    height: 28px !important;
+    min-height: 28px !important;
+    line-height: 20px !important;
+}
+/* 隐藏下拉框的标签以减少高度 */
+.header-settings .gradio-dropdown > label,
+.header-settings .gradio-dropdown .gp-label {
+    display: none !important;
+}
+.header-settings .gradio-dropdown .wrap .border {
+    height: 28px !important;
+    min-height: 28px !important;
 }
 
 .header-settings .gradio-radio button {
@@ -321,11 +571,13 @@ textarea, input {
 }
 
 /* 语言切换按钮样式 */
-#lang-toggle {
+#lang-toggle, #theme-toggle {
     font-size: 0.9rem !important;
     font-weight: 600 !important;
-    padding: 6px 12px !important;
+    padding: 4px 10px !important;
     min-width: 50px !important;
+    height: 64px !important;
+    min-height: 64px !important;
     border-radius: 8px !important;
     transition: all 0.2s ease !important;
 }
@@ -357,6 +609,70 @@ footer { display: none !important; }
         padding: 1rem !important;
     }
 }
+
+/* 风格诊断指标卡片样式 */
+.metric-card {
+    background: var(--background-fill-secondary);
+    border: 1px solid var(--border-color-primary);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+    border-color: var(--neutral-400);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dark .metric-card {
+    background: var(--background-fill-primary);
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.metric-icon {
+    font-size: 1.2rem;
+}
+
+.metric-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--neutral-700);
+}
+
+.dark .metric-name {
+    color: var(--neutral-300);
+}
+
+.metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+}
+
+.metric-value-full {
+    font-size: 0.9rem;
+    color: var(--neutral-600);
+    word-break: break-word;
+}
+
+.dark .metric-value-full {
+    color: var(--neutral-400);
+}
+
+.metric-desc {
+    font-size: 0.85rem;
+    color: var(--neutral-500);
+    font-style: italic;
+}
 """
 
 # 黑白极简主题配置
@@ -386,7 +702,6 @@ i18n = {
         "tab_write": "WRITING ASSISTANT",
         "source_doc": "### SOURCE DOCUMENT",
         "upload_label": "Upload PDF",
-        "parse_btn": "INITIALIZE PARSING",
         "config_title": "### PROCESSING CONFIG",
         "mode_label": "Analysis Depth",
         "mode_info": "Select processing granularity",
@@ -432,7 +747,6 @@ i18n = {
         "tab_write": "学术写作助手",
         "source_doc": "### 源文档",
         "upload_label": "上传 PDF 文件",
-        "parse_btn": "开始解析",
         "config_title": "### 处理配置",
         "mode_label": "解析深度",
         "mode_info": "选择处理粒度",
@@ -516,21 +830,21 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
     lang_state = gr.State("en")
 
     with gr.Row(elem_classes="header-container"):
-        with gr.Column(scale=4):
+        with gr.Column(scale=1):
             gr.HTML("""
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width: 32px; height: 32px; background: currentColor; border-radius: 8px;"></div>
                     <div>
                         <div class="logo-text">ResearchPal / AI</div>
-                        <div id="subtitle" style="font-size: 0.9rem; opacity: 0.6; margin-top: -4px;">Research Intelligence Suite v2.0</div>
+                        <div id="subtitle" style="font-size: 0.9rem; opacity: 0.6; margin-top: -0px;">Research Intelligence Suite v2.0</div>
                     </div>
                 </div>
             """)
-        with gr.Column(scale=2):
+        with gr.Column(scale=3):
             with gr.Row(equal_height=True, variant="compact", elem_classes="header-settings"):
-                model_select = gr.Dropdown(choices=[], label="Model", interactive=True, scale=3, min_width=220)
-                lang_btn = gr.Button("EN", variant="secondary", scale=1, min_width=50, elem_id="lang-toggle")
-                dark_btn = gr.Button("🌙", variant="secondary", scale=1, min_width=44, elem_id="theme-toggle")
+                model_select = gr.Dropdown(choices=[], label="Model", interactive=True, scale=10, min_width=500, show_label=False)
+                lang_btn = gr.Button("EN", variant="secondary", scale=1, min_width=32, elem_id="lang-toggle")
+                dark_btn = gr.Button("🌙", variant="secondary", scale=1, min_width=32, elem_id="theme-toggle")
                 
     # 绑定深色模式切换事件
     dark_btn.click(None, None, None, js=toggle_theme())
@@ -543,17 +857,14 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
         with gr.TabItem("PAPER ANALYSIS", id="tab_parse") as t1:
             with gr.Row():
                 # 左侧：上传与操作区
-                with gr.Column(scale=1, elem_classes="panel-container"):
+                with gr.Column(scale=1, min_width=280, elem_classes="panel-container"):
                     md_source = gr.Markdown("### SOURCE DOCUMENT")
                     pdf_input = gr.File(
                         label="Upload PDF",
                         file_types=[".pdf"],
                         file_count="single",
-                        height=120
+                        height=80
                     )
-                    
-                    with gr.Row():
-                        parse_btn = gr.Button("INITIALIZE PARSING", variant="primary", scale=1)
                     
                     md_config = gr.Markdown("### PROCESSING CONFIG")
                     mode_select = gr.Radio(
@@ -568,7 +879,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                     parsed_text_hidden = gr.Textbox(visible=False)
 
                 # 右侧：结果展示区
-                with gr.Column(scale=2, elem_classes="panel-container"):
+                with gr.Column(scale=4, elem_classes="panel-container"):
                     md_report = gr.Markdown("### INTELLIGENCE REPORT")
                     
                     with gr.Tabs():
@@ -576,7 +887,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                             one_liner_output = gr.Textbox(
                                 label="Core Insight",
                                 placeholder="Processing...",
-                                lines=2,
+                                lines=5,
                                 show_copy_button=True,
                                 elem_id="core-insight"
                             )
@@ -589,14 +900,14 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                             mermaid_output = gr.Code(
                                 label="Graph Code",
                                 language=None,
-                                lines=15
+                                lines=25
                             )
                         
                         with gr.TabItem("RAW DATA") as t1_sub3:
                             with gr.Accordion("Full Text", open=False) as acc1:
                                 parsed_text_display = gr.Textbox(
                                     label="Parsed Content",
-                                    lines=10,
+                                    lines=25,
                                     interactive=False,
                                     show_copy_button=True
                                 )
@@ -605,15 +916,6 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
 
             # 绑定事件 - 上传文件自动解析
             pdf_input.change(
-                call_parse,
-                inputs=[pdf_input],
-                outputs=[parsed_text_hidden, raw_json_output]
-            ).then(
-                lambda x: x, inputs=[parsed_text_hidden], outputs=[parsed_text_display]
-            )
-
-            # 保留手动解析按钮作为备用
-            parse_btn.click(
                 call_parse,
                 inputs=[pdf_input],
                 outputs=[parsed_text_hidden, raw_json_output]
@@ -688,8 +990,8 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
 
             # 绑定事件
             analyze_btn.click(
-                call_profile,
-                inputs=[text_input, domain_select],
+                call_profile_formatted,
+                inputs=[text_input, domain_select, lang_state],
                 outputs=[lexical_json, structural_json, diagnostics_output]
             )
             
@@ -710,7 +1012,6 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             # Tab 1 Content
             gr.update(value=t["source_doc"]),
             gr.update(label=t["upload_label"]),
-            gr.update(value=t["parse_btn"]),
             gr.update(value=t["config_title"]),
             gr.update(label=t["mode_label"], info=t["mode_info"], choices=t["modes"]),
             gr.update(value=t["summary_btn"]),
@@ -752,7 +1053,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
         inputs=[lang_btn],
         outputs=[
             t1, t2,
-            md_source, pdf_input, parse_btn, md_config, mode_select, summary_btn,
+            md_source, pdf_input, md_config, mode_select, summary_btn,
             md_report, t1_sub1, one_liner_output, detailed_output, t1_sub2, md_graph, mermaid_output,
             t1_sub3, acc1, parsed_text_display, acc2, raw_json_output,
             md_draft, text_input, md_params, domain_select, journal_select, formality_slider,
