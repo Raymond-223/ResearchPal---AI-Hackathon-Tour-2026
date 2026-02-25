@@ -56,6 +56,7 @@ class WriteTransferRequest(BaseModel):
     target_journal: str = "Nature"
     formality: float = 0.85  # 0~1
     domain: str = "cs"
+    model: Optional[str] = None  # Model selection for LLM
 
 
 class WriteTransferResponse(BaseModel):
