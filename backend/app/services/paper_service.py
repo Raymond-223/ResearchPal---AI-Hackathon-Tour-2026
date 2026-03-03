@@ -11,32 +11,178 @@ def _rid(seed: str) -> str:
 
 def parse_pdf_bytes(pdf_bytes: bytes) -> Dict[str, Any]:
     """
-    MVP可用版：
-    - 用 PyMuPDF 提取全文文本
-    - 章节先给一个粗切（可被算法A替换为更准的section识别）
+    Enhanced version:
+    - Extract full text with PyMuPDF
+    - Extract metadata (title, authors, abstract)
+    - Detect sections and count citations
     """
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    # Extract metadata from PDF
+    metadata = doc.metadata
+    pdf_title = metadata.get("title", "").strip() if metadata else ""
+    pdf_author = metadata.get("author", "").strip() if metadata else ""
+
+    # Extract text from all pages
     pages_text = []
     for page in doc:
         pages_text.append(page.get_text("text"))
     full_text = "\n".join(pages_text).strip()
 
-    # 简单兜底：如果抽不出文本，给提示（演示不会空白）
+    page_count = len(doc)
+    doc.close()
+
+    # Fallback if no text extracted
     if not full_text:
         full_text = "⚠️ 未能从PDF提取到可读文本（可能是扫描版/图片PDF）。请换一篇可复制文本的PDF，或后续接OCR。"
 
-    # 粗略“章节”切分（后续算法A可替换）
-    sections = [{"name": "Full Text", "text": full_text}]
+    # Extract title from text if not in metadata
+    title = pdf_title or _extract_title_from_text(full_text)
+
+    # Extract authors
+    authors = _extract_authors_from_text(full_text, pdf_author)
+
+    # Extract abstract
+    abstract = _extract_abstract_from_text(full_text)
+
+    # Count citations
+    citations_count = _count_citations(full_text)
+
+    # Detect sections
+    sections = _detect_sections(full_text)
 
     request_id = _rid(str(len(pdf_bytes)) + full_text[:200])
     return {
         "request_id": request_id,
-        "title": None,
-        "authors": [],
-        "abstract": None,
+        "title": title,
+        "authors": authors,
+        "abstract": abstract,
+        "pages": page_count,
+        "citations_count": citations_count,
         "sections": sections,
         "full_text": full_text,
     }
+
+
+def _extract_title_from_text(text: str) -> str:
+    """Extract title from first few lines of text"""
+    import re
+
+    lines = text.split('\n')
+    # Look at first 15 lines for title
+    for i, line in enumerate(lines[:15]):
+        line = line.strip()
+        # Title is usually a longer line (20-200 chars) without special patterns
+        if 20 < len(line) < 200 and not re.match(r'^\d+$|^[A-Z]{2,}$|^http', line):
+            # Avoid lines that look like headers, page numbers, or URLs
+            if not line.lower().startswith(('abstract', 'introduction', 'keywords', 'arxiv')):
+                return line
+
+    return "Untitled"
+
+
+def _extract_authors_from_text(text: str, pdf_author: str = "") -> list:
+    """Extract author names from text"""
+    import re
+
+    if pdf_author:
+        # Split by common delimiters
+        authors = re.split(r'[,;]|\sand\s', pdf_author)
+        return [a.strip() for a in authors if a.strip()]
+
+    # Look for author patterns in first 30 lines
+    lines = text.split('\n')
+    for i, line in enumerate(lines[:30]):
+        line = line.strip()
+        # Look for lines with capitalized names (2-4 words, each capitalized)
+        if re.match(r'^([A-Z][a-z]+\s+){1,3}[A-Z][a-z]+$', line):
+            # Check if next few lines also match (multiple authors)
+            authors = [line]
+            for j in range(i+1, min(i+5, len(lines))):
+                next_line = lines[j].strip()
+                if re.match(r'^([A-Z][a-z]+\s+){1,3}[A-Z][a-z]+$', next_line):
+                    authors.append(next_line)
+                else:
+                    break
+            if authors:
+                return authors
+
+    return []
+
+
+def _extract_abstract_from_text(text: str) -> str:
+    """Extract abstract section from text"""
+    import re
+
+    # Look for abstract section
+    abstract_match = re.search(
+        r'(?i)abstract\s*[:\-]?\s*\n\s*(.+?)(?=\n\s*\n|\n\s*(?:introduction|keywords|1\.|I\.))',
+        text,
+        re.DOTALL
+    )
+
+    if abstract_match:
+        abstract = abstract_match.group(1).strip()
+        # Limit to reasonable length
+        if len(abstract) > 2000:
+            abstract = abstract[:2000] + "..."
+        return abstract
+
+    return None
+
+
+def _count_citations(text: str) -> int:
+    """Count citations in text"""
+    import re
+
+    # Count [1], [2], etc.
+    bracket_citations = len(re.findall(r'\[\d+\]', text))
+
+    # Count (Author, Year) style citations
+    author_year_citations = len(re.findall(r'\([A-Z][a-z]+(?:\s+et al\.)?,?\s+\d{4}\)', text))
+
+    # Return the higher count (papers usually use one style)
+    return max(bracket_citations, author_year_citations)
+
+
+def _detect_sections(text: str) -> list:
+    """Detect paper sections"""
+    import re
+
+    sections = []
+
+    # Common section patterns
+    section_patterns = [
+        (r'(?i)abstract', 'Abstract'),
+        (r'(?i)introduction|1\.\s*introduction', 'Introduction'),
+        (r'(?i)related work|2\.\s*related', 'Related Work'),
+        (r'(?i)method|approach|3\.\s*method', 'Methods'),
+        (r'(?i)experiment|result|4\.\s*experiment', 'Results'),
+        (r'(?i)discussion|5\.\s*discussion', 'Discussion'),
+        (r'(?i)conclusion|6\.\s*conclusion', 'Conclusion'),
+        (r'(?i)reference|bibliography', 'References'),
+    ]
+
+    for pattern, name in section_patterns:
+        match = re.search(pattern, text)
+        if match:
+            sections.append({"name": name, "position": match.start()})
+
+    # If no sections detected, return full text
+    if not sections:
+        return [{"name": "Full Text", "text": text}]
+
+    # Sort by position
+    sections.sort(key=lambda x: x['position'])
+
+    # Extract text for each section
+    for i, section in enumerate(sections):
+        start = section['position']
+        end = sections[i+1]['position'] if i+1 < len(sections) else len(text)
+        section['text'] = text[start:end].strip()[:500]  # Preview only
+        del section['position']
+
+    return sections
 
 
 import uuid

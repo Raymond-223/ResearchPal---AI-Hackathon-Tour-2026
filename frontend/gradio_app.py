@@ -3,13 +3,35 @@ import os
 import time
 import requests
 import gradio as gr
+from gradio_utils import (
+    validate_pdf_file,
+    create_error_message,
+    create_success_message,
+    create_loading_message,
+    retry_on_error,
+    timed
+)
+from gradio_config import TIMEOUT_CONFIG, FILE_UPLOAD_CONFIG
+from gradio_ui import UIComponents
+from keyboard_shortcuts import get_keyboard_shortcuts
+from export_utils import ExportManager
 
 BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
+# Load external CSS
+css_path = os.path.join(os.path.dirname(__file__), "gradio_styles.css")
+try:
+    with open(css_path, "r", encoding="utf-8") as f:
+        external_css = f.read()
+except FileNotFoundError:
+    print(f"⚠️ Warning: Could not find {css_path}, using inline CSS only")
+    external_css = ""
+
+@timed
 def call_parse(pdf_file):
     # 1) 没有上传文件
     if pdf_file is None:
-        return "", {"error": "请先上传一个PDF文件再点击解析。"}
+        return "", {"error": "请先上传一个PDF文件再点击解析。"}, "", "", 0, 0
 
     # 2) Gradio File 可能返回：str 路径 / dict / 临时文件对象
     path = None
@@ -21,13 +43,36 @@ def call_parse(pdf_file):
         path = getattr(pdf_file, "name", None)
 
     if not path:
-        return "", {"error": f"无法识别上传文件对象：{type(pdf_file)}"}
+        return "", {"error": f"无法识别上传文件对象：{type(pdf_file)}"}, "", "", 0, 0
 
-    with open(path, "rb") as f:
-        r = requests.post(f"{BACKEND}/api/paper/parse", files={"file": f})
-    r.raise_for_status()
-    data = r.json()
-    return data.get("full_text", ""), data
+    # 文件验证
+    is_valid, error_msg = validate_pdf_file(path, FILE_UPLOAD_CONFIG["max_file_size"])
+    if not is_valid:
+        return "", {"error": error_msg}, "", "", 0, 0
+
+    try:
+        with open(path, "rb") as f:
+            r = requests.post(
+                f"{BACKEND}/api/paper/parse",
+                files={"file": f},
+                timeout=TIMEOUT_CONFIG["parse_timeout"]
+            )
+        r.raise_for_status()
+        data = r.json()
+
+        # Extract metadata
+        title = data.get("title", "Untitled")
+        authors = ", ".join(data.get("authors", [])) if data.get("authors") else "Unknown"
+        pages = data.get("pages", 0)
+        citations = data.get("citations_count", 0)
+
+        return data.get("full_text", ""), data, title, authors, pages, citations
+    except requests.exceptions.Timeout:
+        return "", {"error": "请求超时，请稍后重试"}, "", "", 0, 0
+    except requests.exceptions.RequestException as e:
+        return "", {"error": f"网络错误：{str(e)}"}, "", "", 0, 0
+    except Exception as e:
+        return "", {"error": f"解析失败：{str(e)}"}, "", "", 0, 0
 
 def call_summary(text, mode, model, language):
     r = requests.post(f"{BACKEND}/api/paper/summary", json={"text": text, "mode": mode, "model": model, "language": language})
@@ -244,11 +289,18 @@ def call_summary_stream(text, mode, model, language):
     流式调用摘要生成API
     使用 Gradio 生成器实现真正的流式输出
     """
-    if not text:
-        yield "", "请先解析PDF文件", ""
+    if not text or not text.strip():
+        yield "❌ 错误：请先上传并解析PDF文件", "等待文件上传...", ""
         return
 
+    one_liner_text = ""
+    detailed_text = ""
+    mermaid_text = ""
+
     try:
+        # 显示初始加载状态
+        yield "⏳ 正在生成摘要...", "⏳ 正在处理中，请稍候...", ""
+
         with requests.post(
             f"{BACKEND}/api/paper/summary/stream",
             json={"text": text, "mode": mode, "model": model, "language": language},
@@ -256,10 +308,6 @@ def call_summary_stream(text, mode, model, language):
             timeout=120
         ) as r:
             r.raise_for_status()
-
-            one_liner_text = ""
-            detailed_text = ""
-            mermaid_text = ""
 
             for line in r.iter_lines():
                 if line:
@@ -283,8 +331,14 @@ def call_summary_stream(text, mode, model, language):
                                 break
                         except json.JSONDecodeError:
                             continue
+    except requests.exceptions.Timeout:
+        yield f"❌ 请求超时：处理时间过长，请尝试使用'快速速览'模式", detailed_text or "请求超时", mermaid_text
+    except requests.exceptions.ConnectionError:
+        yield f"❌ 连接错误：无法连接到后端服务，请检查服务是否正常运行", "连接失败", ""
+    except requests.exceptions.HTTPError as e:
+        yield f"❌ 服务器错误 ({e.response.status_code})：{e.response.text[:200]}", "处理失败", ""
     except Exception as e:
-        yield f"Error: {str(e)}", "", ""
+        yield f"❌ 未知错误：{str(e)}", "处理失败", ""
 
 
 def call_transfer_stream(text, journal, formality, domain, model):
@@ -292,11 +346,17 @@ def call_transfer_stream(text, journal, formality, domain, model):
     流式调用润色改写API
     使用 Gradio 生成器实现真正的流式输出
     """
-    if not text:
-        yield "", "请先输入要润色的文本"
+    if not text or not text.strip():
+        yield "❌ 错误：请先输入要润色的文本", "请输入文本内容"
         return
 
+    rewritten_text = ""
+    suggestions_text = ""
+
     try:
+        # 显示初始加载状态
+        yield "⏳ 正在润色改写...", "⏳ 正在生成建议..."
+
         with requests.post(
             f"{BACKEND}/api/write/transfer/stream",
             json={"text": text, "target_journal": journal, "formality": formality, "domain": domain, "model": model},
@@ -304,9 +364,6 @@ def call_transfer_stream(text, journal, formality, domain, model):
             timeout=120
         ) as r:
             r.raise_for_status()
-
-            rewritten_text = ""
-            suggestions_text = ""
 
             for line in r.iter_lines():
                 if line:
@@ -328,10 +385,17 @@ def call_transfer_stream(text, journal, formality, domain, model):
                                 break
                         except json.JSONDecodeError:
                             continue
+    except requests.exceptions.Timeout:
+        yield f"❌ 请求超时：处理时间过长，请稍后重试", suggestions_text or "请求超时"
+    except requests.exceptions.ConnectionError:
+        yield f"❌ 连接错误：无法连接到后端服务", "连接失败"
+    except requests.exceptions.HTTPError as e:
+        yield f"❌ 服务器错误 ({e.response.status_code})：{e.response.text[:200]}", "处理失败"
     except Exception as e:
-        yield f"Error: {str(e)}", ""
+        yield f"❌ 未知错误：{str(e)}", "处理失败"
 
 
+@retry_on_error(max_retries=2, delay=1.0)
 def get_models():
     """Fetch available models from backend with retry logic"""
     # 默认模型列表（作为fallback）
@@ -342,38 +406,155 @@ def get_models():
         ("deepseek-r1", "deepseek-r1"),
         ("deepseek-v3", "deepseek-v3"),
     ]
-    
-    # 添加重试逻辑，等待后端就绪
-    max_retries = 5
-    retry_delay = 1  # seconds
-    
-    for attempt in range(max_retries):
-        try:
-            r = requests.get(f"{BACKEND}/api/models", timeout=3)
-            if r.status_code == 200:
-                data = r.json().get("data", [])
-                if data:
-                    # 将后端返回的模型转换为 (name, id) 元组列表
-                    model_choices = [(m.get("name", m.get("id")), m.get("id")) for m in data]
-                    # 如果列表不为空，使用第一个模型作为默认值
-                    if model_choices:
-                        # 返回 gr.update 对象，同时设置 choices 和 value
-                        return gr.update(choices=model_choices, value=model_choices[0][1])
-        except requests.exceptions.RequestException as e:
-            if attempt < max_retries - 1:
-                print(f"Backend not ready (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
-                time.sleep(retry_delay)
-            else:
-                print(f"Failed to fetch models after {max_retries} attempts: {e}")
-        except Exception as e:
-            print(f"Unexpected error fetching models: {e}")
-            break
-    
+
+    try:
+        r = requests.get(
+            f"{BACKEND}/api/models",
+            timeout=TIMEOUT_CONFIG["model_fetch_timeout"]
+        )
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            if data:
+                # 将后端返回的模型转换为 (name, id) 元组列表
+                model_choices = [(m.get("name", m.get("id")), m.get("id")) for m in data]
+                # 如果列表不为空，使用第一个模型作为默认值
+                if model_choices:
+                    return gr.update(choices=model_choices, value=model_choices[0][1])
+    except Exception as e:
+        print(f"⚠️ 获取模型列表失败: {e}，使用默认列表")
+
     # 返回默认模型列表和第一个作为默认值
     return gr.update(choices=default_models, value=default_models[0][1])
 
-# 自定义CSS
-custom_css = """
+
+# ============== Export Handlers ==============
+def export_markdown_handler(one_liner, detailed, mermaid, citation_style):
+    """Export summary as Markdown"""
+    try:
+        content = f"## Core Insight\n\n{one_liner}\n\n## Detailed Summary\n\n{detailed}\n\n## Knowledge Graph\n\n```mermaid\n{mermaid}\n```"
+
+        markdown = ExportManager.export_to_markdown(
+            title="Paper Analysis Report",
+            content=content,
+            metadata={"source": "ResearchPal AI"}
+        )
+
+        filename = f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        filepath = ExportManager.save_export(markdown, filename, "md")
+
+        return f"✅ Exported to: {filepath}"
+    except Exception as e:
+        return f"❌ Export failed: {str(e)}"
+
+
+def export_docx_handler(one_liner, detailed, citation_style):
+    """Export summary as Word document"""
+    try:
+        content = f"{one_liner}\n\n{detailed}"
+
+        docx_bytes = ExportManager.export_to_docx(
+            title="Paper Analysis Report",
+            content=content,
+            metadata={"source": "ResearchPal AI"}
+        )
+
+        filename = f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        filepath = ExportManager.save_export(docx_bytes, filename, "docx")
+
+        return f"✅ Exported to: {filepath}"
+    except ImportError:
+        return "❌ python-docx not installed. Install with: pip install python-docx"
+    except Exception as e:
+        return f"❌ Export failed: {str(e)}"
+
+
+def export_bib_handler(citation_style):
+    """Export citation as BibTeX"""
+    try:
+        # Placeholder - would need actual paper metadata
+        bib_content = f"""@article{{placeholder,
+  title={{Paper Title}},
+  author={{Author Name}},
+  journal={{Journal Name}},
+  year={{2024}},
+  note={{Citation format: {citation_style}}}
+}}"""
+
+        filename = f"citation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bib"
+        filepath = ExportManager.save_export(bib_content, filename, "bib")
+
+        return f"✅ Exported to: {filepath}"
+    except Exception as e:
+        return f"❌ Export failed: {str(e)}"
+
+
+# ============== History Management ==============
+def add_to_history(history, filename, summary_preview):
+    """Add analysis to history"""
+    from datetime import datetime
+
+    history_item = {
+        "filename": filename or "Untitled",
+        "preview": summary_preview[:100] + "..." if len(summary_preview) > 100 else summary_preview,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    # Keep only last 10 items
+    history = [history_item] + history[:9]
+    return history
+
+
+def render_history(history):
+    """Render history as HTML"""
+    if not history:
+        return "<p style='text-align: center; color: var(--neutral-500);'>No history yet</p>"
+
+    html = "<div class='history-list'>"
+    for item in history:
+        html += f"""
+        <div class='history-item'>
+            <div class='history-item-title'>{item['filename']}</div>
+            <div class='history-item-preview'>{item['preview']}</div>
+            <div class='history-item-time'>{item['timestamp']}</div>
+        </div>
+        """
+    html += "</div>"
+    return html
+
+
+def clear_history():
+    """Clear all history"""
+    return []
+
+
+# ============== Quick Actions ==============
+def copy_all_results(one_liner, detailed, mermaid):
+    """Copy all results to clipboard"""
+    content = f"Core Insight:\n{one_liner}\n\nDetailed Summary:\n{detailed}\n\nKnowledge Graph:\n{mermaid}"
+    return content
+
+
+def save_results(one_liner, detailed, mermaid):
+    """Save results to file"""
+    try:
+        content = f"Core Insight:\n{one_liner}\n\nDetailed Summary:\n{detailed}\n\nKnowledge Graph:\n{mermaid}"
+        filename = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+
+        import os
+        os.makedirs("exports", exist_ok=True)
+        filepath = os.path.join("exports", filename)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return f"✅ Saved to: {filepath}"
+    except Exception as e:
+        return f"❌ Save failed: {str(e)}"
+
+
+# Custom CSS - combining external styles with app-specific overrides
+custom_css = external_css + """
+/* App-specific CSS overrides */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
 
 body {
@@ -387,7 +568,7 @@ body {
     padding-bottom: 0 !important;
 }
 
-/* 标题区域 - 紧凑型导航栏 */
+/* Header - Compact navigation bar */
 .header-container {
     text-align: left;
     margin-bottom: 0 !important;
@@ -400,49 +581,51 @@ body {
     gap: 0 !important;
 }
 
-/* 消除 header 和 tabs 之间的空白 */
 .header-container + .gr-tabs {
     margin-top: 0 !important;
     padding-top: 0 !important;
 }
 
-/* Tabs 容器顶部无间距 */
 .tabs {
     margin-top: 0 !important;
 }
+
 .header-container > .row {
     gap: 0.5rem !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
     overflow: visible !important;
 }
+
 .logo-text {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 700;
     font-size: 1.2rem !important;
     letter-spacing: -1px;
-    /* 浅色模式下：使用深色文字 */
     color: #171717;
 }
+
 .dark .logo-text {
-    /* 深色模式下：使用浅色文字 */
     color: #f5f5f5;
 }
+
 #subtitle {
     font-size: 0.7rem !important;
 }
 
-/* Tab 样式 */
+/* Tab styles */
 .tabs {
     border: none !important;
     gap: 0.5rem;
 }
+
 .tab-nav {
     border: 1px solid var(--border-color-primary) !important;
     border-radius: 12px !important;
     padding: 4px !important;
     background: var(--background-fill-secondary);
 }
+
 button.selected {
     background: var(--background-fill-primary) !important;
     border: 1px solid var(--border-color-primary) !important;
@@ -451,7 +634,7 @@ button.selected {
     font-weight: 600 !important;
 }
 
-/* 卡片式容器 */
+/* Panel container */
 .panel-container {
     border: 1px solid var(--border-color-primary);
     border-radius: 16px;
@@ -460,31 +643,33 @@ button.selected {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }
 
-/* 按钮样式 */
+/* Button styles */
 button.primary {
     background: var(--neutral-900) !important;
     color: white !important;
     border: 1px solid var(--neutral-900) !important;
     transition: all 0.2s;
 }
+
 .dark button.primary {
     background: var(--neutral-50) !important;
     color: black !important;
     border: 1px solid var(--neutral-50) !important;
 }
+
 button.primary:hover {
     opacity: 0.9;
     transform: translateY(-1px);
 }
 
-/* 输入框 */
+/* Input fields */
 textarea, input {
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 0.95rem !important;
     border-radius: 8px !important;
 }
 
-/* 主题按钮样式 - 基础样式 */
+/* Theme toggle button */
 #theme-toggle {
     padding: 4px 10px !important;
     min-width: 50px !important;
@@ -492,21 +677,16 @@ textarea, input {
     min-height: 64px !important;
     border-radius: 8px !important;
     transition: all 0.2s ease !important;
-}
-
-/* 浅色模式下：深色背景 + 月亮图标 */
-#theme-toggle {
     background: #171717 !important;
     border: 1px solid #171717 !important;
 }
 
-/* 深色模式下：白色背景 + 太阳图标 */
 .dark #theme-toggle {
     background: #ffffff !important;
     border: 1px solid #ffffff !important;
 }
 
-/* 统一设置区域按钮样式 */
+/* Header settings unified styles */
 .header-settings .gradio-dropdown,
 .header-settings .gradio-radio,
 .header-settings .gradio-button {
@@ -538,27 +718,29 @@ textarea, input {
     padding: 2px 8px !important;
 }
 
-/* Model下拉框更精确的高度控制 */
 .header-settings .gradio-dropdown {
     height: 28px !important;
 }
+
 .header-settings .gradio-dropdown button.trigger,
 .header-settings .gradio-dropdown .secondary {
     height: 28px !important;
     min-height: 28px !important;
     line-height: 20px !important;
 }
+
 .header-settings .gradio-dropdown input,
 .header-settings .gradio-dropdown span {
     height: 28px !important;
     min-height: 28px !important;
     line-height: 20px !important;
 }
-/* 隐藏下拉框的标签以减少高度 */
+
 .header-settings .gradio-dropdown > label,
 .header-settings .gradio-dropdown .gp-label {
     display: none !important;
 }
+
 .header-settings .gradio-dropdown .wrap .border {
     height: 28px !important;
     min-height: 28px !important;
@@ -570,7 +752,6 @@ textarea, input {
     padding: 4px 8px !important;
 }
 
-/* 语言切换按钮样式 */
 #lang-toggle, #theme-toggle {
     font-size: 0.9rem !important;
     font-weight: 600 !important;
@@ -582,35 +763,82 @@ textarea, input {
     transition: all 0.2s ease !important;
 }
 
-/* 隐藏footer */
+/* Hide footer */
 footer { display: none !important; }
 
-/* 简单响应式适配 - 平板 */
-@media (max-width: 1024px) {
-    .header-container .row {
-        flex-wrap: wrap !important;
-    }
+/* History sidebar */
+.history-sidebar {
+    position: fixed;
+    right: -320px;
+    top: 80px;
+    width: 300px;
+    height: calc(100vh - 100px);
+    background: var(--background-fill-primary);
+    border: 1px solid var(--border-color-primary);
+    border-radius: 12px 0 0 12px;
+    padding: 1rem;
+    transition: right 0.3s ease;
+    z-index: 100;
+    overflow-y: auto;
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
 }
 
-/* 简单响应式适配 - 小屏幕手机 */
-@media (max-width: 768px) {
-    .gradio-container {
-        max-width: 100% !important;
-        padding: 0.5rem !important;
-    }
-    .header-container {
-        flex-direction: column !important;
-        gap: 1rem !important;
-    }
-    .header-container .column {
-        width: 100% !important;
-    }
-    .panel-container {
-        padding: 1rem !important;
-    }
+.history-sidebar.visible {
+    right: 0;
 }
 
-/* 风格诊断指标卡片样式 */
+.history-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--background-fill-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.history-item:hover {
+    transform: translateX(-4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.history-item-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.history-item-preview {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-item-time {
+    font-size: 0.75rem;
+    color: var(--neutral-500);
+    margin-top: 0.25rem;
+}
+
+/* Quick actions bar */
+.quick-actions-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: var(--background-fill-secondary);
+    border-radius: 8px;
+}
+
+.quick-actions-bar button {
+    flex: 1;
+    font-size: 0.85rem !important;
+    padding: 0.5rem !important;
+}
+
+/* Metric cards for style diagnostics */
 .metric-card {
     background: var(--background-fill-secondary);
     border: 1px solid var(--border-color-primary);
@@ -799,35 +1027,49 @@ js_func = """
 """
 
 def toggle_theme():
-    """切换深色模式的 JS，同时切换图标"""
+    """切换深色模式的 JS，同时切换图标并保存到localStorage"""
     return """() => {
         const body = document.body;
         const btn = document.getElementById('theme-toggle');
         body.classList.toggle('dark');
-        if (body.classList.contains('dark')) {
+        const isDark = body.classList.contains('dark');
+
+        if (isDark) {
             btn.innerHTML = '☀️';
+            localStorage.setItem('researchpal_theme', 'dark');
         } else {
             btn.innerHTML = '🌙';
+            localStorage.setItem('researchpal_theme', 'light');
         }
     }"""
 
 def toggle_lang():
-    """切换语言的 JS，同时切换按钮文字"""
+    """切换语言的 JS，同时切换按钮文字并保存到localStorage"""
     return """() => {
         const btn = document.getElementById('lang-toggle');
         const currentLang = btn.innerHTML;
+        let newLang;
+
         if (currentLang === 'EN') {
             btn.innerHTML = '中文';
-            return 'zh';
+            newLang = 'zh';
         } else {
             btn.innerHTML = 'EN';
-            return 'en';
+            newLang = 'en';
         }
+
+        localStorage.setItem('researchpal_lang', newLang);
+        return newLang;
     }"""
 
 with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
     # 状态变量
     lang_state = gr.State("en")
+    history_state = gr.State([])
+
+    # Inject keyboard shortcuts handler
+    keyboard_handler = get_keyboard_shortcuts()
+    keyboard_js = gr.HTML(visible=False, elem_classes=["keyboard-handler"])
 
     with gr.Row(elem_classes="header-container"):
         with gr.Column(scale=1):
@@ -843,14 +1085,76 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
         with gr.Column(scale=3):
             with gr.Row(equal_height=True, variant="compact", elem_classes="header-settings"):
                 model_select = gr.Dropdown(choices=[], label="Model", interactive=True, scale=10, min_width=500, show_label=False)
+                history_toggle_btn = gr.Button("📜", variant="secondary", scale=1, min_width=32, elem_id="history-toggle", elem_classes=["history-btn"])
                 lang_btn = gr.Button("EN", variant="secondary", scale=1, min_width=32, elem_id="lang-toggle")
                 dark_btn = gr.Button("🌙", variant="secondary", scale=1, min_width=32, elem_id="theme-toggle")
                 
     # 绑定深色模式切换事件
     dark_btn.click(None, None, None, js=toggle_theme())
-    
-    # 页面加载时获取模型列表
-    demo.load(get_models, outputs=[model_select])
+
+    # 页面加载时获取模型列表和注入键盘快捷键
+    def on_load():
+        models = get_models()
+        keyboard_script = keyboard_handler.generate_javascript_handler()
+
+        # Add settings restoration and file validation script
+        settings_script = """
+        <script>
+        // Restore settings from localStorage
+        (function() {
+            const settings = JSON.parse(localStorage.getItem('researchpal_settings') || '{}');
+
+            // Restore theme
+            const theme = localStorage.getItem('researchpal_theme');
+            if (theme === 'dark') {
+                document.body.classList.add('dark');
+                const themeBtn = document.getElementById('theme-toggle');
+                if (themeBtn) themeBtn.innerHTML = '☀️';
+            }
+
+            // Restore language
+            const lang = localStorage.getItem('researchpal_lang');
+            if (lang === 'zh') {
+                const langBtn = document.getElementById('lang-toggle');
+                if (langBtn) langBtn.innerHTML = '中文';
+            }
+
+            console.log('Settings restored:', { theme, lang });
+
+            // Client-side file validation
+            setTimeout(() => {
+                const fileInputs = document.querySelectorAll('input[type="file"]');
+                fileInputs.forEach(input => {
+                    input.addEventListener('change', function(e) {
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        // Check file type
+                        if (!file.name.toLowerCase().endsWith('.pdf')) {
+                            alert('❌ Please upload a PDF file only');
+                            e.target.value = '';
+                            return;
+                        }
+
+                        // Check file size (50MB = 52428800 bytes)
+                        if (file.size > 52428800) {
+                            alert('❌ File size exceeds 50MB limit');
+                            e.target.value = '';
+                            return;
+                        }
+
+                        console.log('✅ File validation passed:', file.name, (file.size / 1024 / 1024).toFixed(2) + 'MB');
+                    });
+                });
+            }, 1000);
+        })();
+        </script>
+        """
+
+        full_script = keyboard_script + settings_script
+        return models, gr.update(value=full_script, visible=True)
+
+    demo.load(on_load, outputs=[model_select, keyboard_js])
 
     with gr.Tabs() as tabs:
         # ==================== Tab 1: 论文深度解析 ====================
@@ -859,6 +1163,14 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                 # 左侧：上传与操作区
                 with gr.Column(scale=1, min_width=280, elem_classes="panel-container"):
                     md_source = gr.Markdown("### SOURCE DOCUMENT")
+
+                    # Example papers section
+                    with gr.Accordion("📚 Example Papers", open=False):
+                        gr.Markdown("Try these classic papers:")
+                        example_transformer = gr.Button("🔥 Attention Is All You Need", size="sm")
+                        example_bert = gr.Button("🔥 BERT: Pre-training", size="sm")
+                        example_resnet = gr.Button("🔥 Deep Residual Learning", size="sm")
+
                     pdf_input = gr.File(
                         label="Upload PDF",
                         file_types=[".pdf"],
@@ -869,11 +1181,11 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                     md_config = gr.Markdown("### PROCESSING CONFIG")
                     mode_select = gr.Radio(
                         choices=i18n["en"]["modes"],
-                        value="mvp",
+                        value="fast",
                         label="Analysis Depth",
                         info="Select processing granularity"
                     )
-                    summary_btn = gr.Button("GENERATE INTELLIGENCE", variant="primary")
+                    summary_btn = gr.Button("GENERATE INTELLIGENCE", variant="primary", elem_id="summary-btn", elem_classes=["action-btn"])
 
                     # 隐藏的中间结果
                     parsed_text_hidden = gr.Textbox(visible=False)
@@ -881,7 +1193,13 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                 # 右侧：结果展示区
                 with gr.Column(scale=4, elem_classes="panel-container"):
                     md_report = gr.Markdown("### INTELLIGENCE REPORT")
-                    
+
+                    # Quick actions bar
+                    with gr.Row(elem_classes=["quick-actions-bar"]):
+                        copy_all_btn = gr.Button("📋 Copy All", size="sm", elem_classes=["quick-action"])
+                        save_btn = gr.Button("💾 Save", size="sm", elem_classes=["quick-action"], elem_id="save-btn")
+                        export_quick_btn = gr.Button("📥 Export", size="sm", elem_classes=["quick-action"], elem_id="export-btn")
+
                     with gr.Tabs():
                         with gr.TabItem("EXECUTIVE SUMMARY") as t1_sub1:
                             one_liner_output = gr.Textbox(
@@ -903,7 +1221,27 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                                 lines=25
                             )
                         
-                        with gr.TabItem("RAW DATA") as t1_sub3:
+                        with gr.TabItem("METADATA") as t1_sub3:
+                            metadata_title = gr.Textbox(label="Title", interactive=False, lines=2)
+                            metadata_authors = gr.Textbox(label="Authors", interactive=False, lines=2)
+                            with gr.Row():
+                                metadata_pages = gr.Number(label="Pages", interactive=False)
+                                metadata_citations = gr.Number(label="Citations", interactive=False)
+
+                        with gr.TabItem("EXPORT") as t1_sub4:
+                            citation_style = gr.Dropdown(
+                                choices=["APA", "MLA", "IEEE", "Chicago", "GB/T 7714"],
+                                value="APA",
+                                label="Citation Format",
+                                interactive=True
+                            )
+                            with gr.Row():
+                                export_md_btn = gr.Button("📥 Export Markdown", variant="secondary")
+                                export_docx_btn = gr.Button("📥 Export Word", variant="secondary")
+                                export_bib_btn = gr.Button("📥 Export BibTeX", variant="secondary")
+                            export_status = gr.Textbox(label="Export Status", interactive=False, lines=2)
+
+                        with gr.TabItem("RAW DATA") as t1_sub5:
                             with gr.Accordion("Full Text", open=False) as acc1:
                                 parsed_text_display = gr.Textbox(
                                     label="Parsed Content",
@@ -918,16 +1256,93 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             pdf_input.change(
                 call_parse,
                 inputs=[pdf_input],
-                outputs=[parsed_text_hidden, raw_json_output]
+                outputs=[parsed_text_hidden, raw_json_output, metadata_title, metadata_authors, metadata_pages, metadata_citations]
             ).then(
                 lambda x: x, inputs=[parsed_text_hidden], outputs=[parsed_text_display]
             )
 
+            # Example paper handlers
+            def load_example_paper(paper_name):
+                """Load example paper text"""
+                examples = {
+                    "transformer": """Attention Is All You Need
+
+Abstract: The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature.""",
+
+                    "bert": """BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding
+
+Abstract: We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers. As a result, the pre-trained BERT model can be fine-tuned with just one additional output layer to create state-of-the-art models for a wide range of tasks, such as question answering and language inference, without substantial task-specific architecture modifications.""",
+
+                    "resnet": """Deep Residual Learning for Image Recognition
+
+Abstract: Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously. We explicitly reformulate the layers as learning residual functions with reference to the layer inputs, instead of learning unreferenced functions. We provide comprehensive empirical evidence showing that these residual networks are easier to optimize, and can gain accuracy from considerably increased depth. On the ImageNet dataset we evaluate residual nets with a depth of up to 152 layers—8× deeper than VGG nets but still having lower complexity."""
+                }
+                return examples.get(paper_name, "")
+
+            example_transformer.click(
+                lambda: load_example_paper("transformer"),
+                outputs=[parsed_text_hidden]
+            )
+
+            example_bert.click(
+                lambda: load_example_paper("bert"),
+                outputs=[parsed_text_hidden]
+            )
+
+            example_resnet.click(
+                lambda: load_example_paper("resnet"),
+                outputs=[parsed_text_hidden]
+            )
+
+            # Summary button with history tracking
             summary_btn.click(
                 # 使用生成器函数实现真正的流式输出
                 call_summary_stream,
                 inputs=[parsed_text_hidden, mode_select, model_select, lang_state],
                 outputs=[one_liner_output, detailed_output, mermaid_output]
+            )
+
+            # Quick actions
+            copy_all_btn.click(
+                copy_all_results,
+                inputs=[one_liner_output, detailed_output, mermaid_output],
+                outputs=None,
+                js="""(one_liner, detailed, mermaid) => {
+                    const content = `Core Insight:\\n${one_liner}\\n\\nDetailed Summary:\\n${detailed}\\n\\nKnowledge Graph:\\n${mermaid}`;
+                    navigator.clipboard.writeText(content).then(() => {
+                        alert('✅ Copied to clipboard!');
+                    }).catch(err => {
+                        console.error('Copy failed:', err);
+                    });
+                }"""
+            )
+
+            save_btn.click(
+                save_results,
+                inputs=[one_liner_output, detailed_output, mermaid_output],
+                outputs=None,
+                js="""(one_liner, detailed, mermaid) => {
+                    alert('💾 Results saved!');
+                }"""
+            )
+
+            # Export handlers
+            export_md_btn.click(
+                export_markdown_handler,
+                inputs=[one_liner_output, detailed_output, mermaid_output, citation_style],
+                outputs=[export_status]
+            )
+
+            export_docx_btn.click(
+                export_docx_handler,
+                inputs=[one_liner_output, detailed_output, citation_style],
+                outputs=[export_status]
+            )
+
+            export_bib_btn.click(
+                export_bib_handler,
+                inputs=[citation_style],
+                outputs=[export_status]
             )
 
         # ==================== Tab 2: 学术写作助手 ====================
@@ -960,10 +1375,10 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
                         minimum=0, maximum=1, value=0.85, step=0.05,
                         label="Formality Level"
                     )
-                    
+
                     with gr.Row():
-                        analyze_btn = gr.Button("ANALYZE STYLE", size="lg")
-                        transfer_btn = gr.Button("ENHANCE WRITING", variant="primary", size="lg")
+                        analyze_btn = gr.Button("ANALYZE STYLE", size="lg", elem_id="analyze-btn")
+                        transfer_btn = gr.Button("ENHANCE WRITING", variant="primary", size="lg", elem_id="enhance-btn")
 
                 # 右侧：反馈与结果
                 with gr.Column(scale=1, elem_classes="panel-container"):
@@ -1022,6 +1437,8 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             gr.update(label=t["knowledge_graph"]),
             gr.update(value=t["graph_desc"]),
             gr.update(label=t["graph_code"]),
+            gr.update(label="METADATA"),
+            gr.update(label="EXPORT"),
             gr.update(label=t["raw_data"]),
             gr.update(label=t["full_text"]),
             gr.update(label=t["parsed_content"]),
@@ -1055,7 +1472,7 @@ with gr.Blocks(title="ResearchPal AI", theme=theme, css=custom_css) as demo:
             t1, t2,
             md_source, pdf_input, md_config, mode_select, summary_btn,
             md_report, t1_sub1, one_liner_output, detailed_output, t1_sub2, md_graph, mermaid_output,
-            t1_sub3, acc1, parsed_text_display, acc2, raw_json_output,
+            t1_sub3, t1_sub4, t1_sub5, acc1, parsed_text_display, acc2, raw_json_output,
             md_draft, text_input, md_params, domain_select, journal_select, formality_slider,
             analyze_btn, transfer_btn, md_enhance, t2_sub1, rewritten_output, suggestions_output,
             t2_sub2, diagnostics_output, lexical_json, structural_json,

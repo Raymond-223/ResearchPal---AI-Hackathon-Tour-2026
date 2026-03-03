@@ -1,0 +1,561 @@
+/*
+ * ResearchPal Enhanced Styles
+ * Professional academic UI with modern interactions
+ */
+
+/* ============================================
+   1. BRAND & IDENTITY
+   ============================================ */
+
+:root {
+  /* Academic color palette */
+  --primary-blue: #2563eb;
+  --primary-dark: #1e40af;
+  --accent-gold: #d97706;
+  --success-green: #059669;
+  --error-red: #dc2626;
+
+  /* Neutral palette */
+  --neutral-50: #fafafa;
+  --neutral-100: #f5f5f5;
+  --neutral-200: #e5e5e5;
+  --neutral-300: #d4d4d4;
+  --neutral-400: #a3a3a3;
+  --neutral-500: #737373;
+  --neutral-600: #525252;
+  --neutral-700: #404040;
+  --neutral-800: #262626;
+  --neutral-900: #171717;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark theme overrides */
+.dark {
+  --bg-primary: var(--neutral-900);
+  --bg-secondary: var(--neutral-800);
+  --text-primary: var(--neutral-50);
+  --text-secondary: var(--neutral-300);
+  --border-color: var(--neutral-700);
+}
+
+/* ============================================
+   2. LAYOUT & RESPONSIVE
+   ============================================ */
+
+.gradio-container {
+  max-width: 1400px !important;
+  margin: 0 auto;
+  font-family: var(--font-sans);
+}
+
+/* Mobile-first responsive */
+@media (max-width: 768px) {
+  .gradio-container {
+    padding: var(--spacing-sm) !important;
+  }
+
+  .upload-zone {
+    min-height: 150px !important;
+  }
+
+  .result-content {
+    font-size: 0.9rem;
+  }
+
+  button, .gr-button {
+    min-height: 48px !important;
+    font-size: 1rem !important;
+  }
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .history-sidebar {
+    position: fixed;
+    right: -300px;
+    transition: right var(--transition-base);
+    z-index: 1000;
+  }
+
+  .history-sidebar.open {
+    right: 0;
+  }
+}
+
+/* ============================================
+   3. UPLOAD ZONE
+   ============================================ */
+
+.upload-zone {
+  border: 2px dashed var(--primary-blue) !important;
+  border-radius: 12px !important;
+  padding: var(--spacing-xl) !important;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%) !important;
+  transition: all var(--transition-base) !important;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.upload-zone:hover {
+  border-color: var(--primary-dark) !important;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.upload-zone.dragover {
+  border-color: var(--accent-gold) !important;
+  background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%) !important;
+  transform: scale(1.02);
+}
+
+.dark .upload-zone {
+  background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%) !important;
+}
+
+.dark .upload-zone:hover {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+}
+
+/* Upload icon animation */
+.upload-zone::before {
+  content: "📄";
+  font-size: 3rem;
+  margin-right: var(--spacing-md);
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+/* ============================================
+   4. PROGRESS INDICATORS
+   ============================================ */
+
+.progress-wrapper {
+  margin: var(--spacing-md) 0;
+}
+
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary, var(--neutral-100));
+  border-radius: 8px;
+  border-left: 4px solid var(--primary-blue);
+}
+
+.progress-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--neutral-300);
+  border-top-color: var(--primary-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.dark .progress-spinner {
+  border-color: var(--neutral-700);
+  border-top-color: var(--primary-blue);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Time estimate */
+.progress-container .time-estimate {
+  color: var(--neutral-600);
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.dark .progress-container .time-estimate {
+  color: var(--neutral-400);
+}
+
+/* ============================================
+   5. RESULT CARDS
+   ============================================ */
+
+.card-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--neutral-800);
+  margin-bottom: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.dark .card-title {
+  color: var(--neutral-100);
+}
+
+.card-title::before {
+  content: "📊";
+  font-size: 1.3rem;
+}
+
+.result-content {
+  background: var(--bg-secondary, var(--neutral-50));
+  border: 1px solid var(--border-color, var(--neutral-200));
+  border-radius: 8px;
+  padding: var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.dark .result-content {
+  background: var(--neutral-800);
+  border-color: var(--neutral-700);
+}
+
+.copy-btn {
+  background: var(--primary-blue) !important;
+  color: white !important;
+  padding: var(--spacing-xs) var(--spacing-sm) !important;
+  border-radius: 6px !important;
+  font-size: 0.85rem !important;
+  transition: all var(--transition-fast) !important;
+}
+
+.copy-btn:hover {
+  background: var(--primary-dark) !important;
+  transform: scale(1.05);
+}
+
+.copy-btn.copied {
+  background: var(--success-green) !important;
+}
+
+/* ============================================
+   6. ERROR DISPLAYS
+   ============================================ */
+
+.error-display {
+  margin: var(--spacing-md) 0;
+}
+
+.error-container {
+  display: flex;
+  padding: var(--spacing-md);
+  border-radius: 12px;
+  border-left: 4px solid;
+  animation: slideIn var(--transition-base);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.error-network {
+  background: #fef2f2;
+  border-color: var(--error-red);
+}
+
+.error-file {
+  background: #fff7ed;
+  border-color: var(--accent-gold);
+}
+
+.error-server {
+  background: #f5f5f5;
+  border-color: var(--neutral-600);
+}
+
+.error-timeout {
+  background: #fefce8;
+  border-color: #eab308;
+}
+
+.error-validation {
+  background: #f0f9ff;
+  border-color: var(--primary-blue);
+}
+
+.dark .error-network {
+  background: #450a0a;
+}
+
+.dark .error-file {
+  background: #431407;
+}
+
+.error-icon {
+  font-size: 2rem;
+  margin-right: var(--spacing-md);
+}
+
+.error-content h4 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-weight: 600;
+  color: var(--neutral-900);
+}
+
+.dark .error-content h4 {
+  color: var(--neutral-50);
+}
+
+.error-recovery {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.dark .error-recovery {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================
+   7. KEYBOARD SHORTCUTS
+   ============================================ */
+
+.keyboard-hints {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  right: var(--spacing-lg);
+  background: var(--bg-primary, white);
+  border: 1px solid var(--border-color, var(--neutral-200));
+  border-radius: 12px;
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-xl);
+  z-index: 1000;
+  animation: fadeIn var(--transition-base);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.keyboard-hints h4 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+.keyboard-hints ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.keyboard-hints li {
+  padding: var(--spacing-xs) 0;
+  font-size: 0.85rem;
+  color: var(--neutral-600);
+}
+
+.keyboard-hints kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--neutral-100);
+  border: 1px solid var(--neutral-300);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin-right: var(--spacing-xs);
+}
+
+.dark .keyboard-hints kbd {
+  background: var(--neutral-800);
+  border-color: var(--neutral-600);
+}
+
+/* ============================================
+   8. ONBOARDING TOUR
+   ============================================ */
+
+.tour-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tour-step {
+  position: absolute;
+  background: white;
+  border-radius: 12px;
+  padding: var(--spacing-lg);
+  max-width: 400px;
+  box-shadow: var(--shadow-xl);
+  animation: bounceIn var(--transition-slow);
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tour-step h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 1.2rem;
+  color: var(--primary-blue);
+}
+
+.tour-step p {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--neutral-600);
+}
+
+.tour-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+/* ============================================
+   9. ANIMATIONS & MICRO-INTERACTIONS
+   ============================================ */
+
+/* Button hover effects */
+button, .gr-button {
+  transition: all var(--transition-fast) !important;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* Loading pulse */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Success checkmark */
+@keyframes checkmark {
+  0% {
+    stroke-dashoffset: 50;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.success-checkmark {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: checkmark 0.5s ease-in-out forwards;
+}
+
+/* ============================================
+   10. ACCESSIBILITY
+   ============================================ */
+
+/* Focus indicators */
+button:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--primary-blue) !important;
+  outline-offset: 2px !important;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .upload-zone {
+    border-width: 3px !important;
+  }
+
+  button {
+    border: 2px solid currentColor !important;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
